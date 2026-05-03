@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="server/app/static/Logo.png" alt="LOCKON VOIGHT Logo" width="400" />
+  <img src="server/app/static/Logo.png" alt="LOCKON VOIGHT Logo" width="300" />
 
   <h1>LOCKON VOIGHT</h1>
 

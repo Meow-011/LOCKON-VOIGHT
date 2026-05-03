@@ -1,0 +1,82 @@
+// LOCKON VOIGHT — Enrollment Protocol Buffer Definition
+// Defines the gRPC service for Agent enrollment with the Server.
+
+syntax = "proto3";
+
+package voight;
+
+option go_package = "github.com/lockon/voight-agent/proto/voight";
+
+import "google/protobuf/timestamp.proto";
+
+// ═══════════════════════════════════════════════
+// Enrollment Service — Agent registers with Server
+// ═══════════════════════════════════════════════
+
+service EnrollmentService {
+  // Agent sends enrollment request with token
+  rpc Enroll(EnrollmentRequest) returns (EnrollmentResponse);
+
+  // Agent checks if it's still enrolled and valid
+  rpc CheckStatus(StatusRequest) returns (StatusResponse);
+}
+
+// ─────────────────────────────────────────────
+// Messages
+// ─────────────────────────────────────────────
+
+message EnrollmentRequest {
+  string enrollment_token = 1;        // Token provided by proctor (used as payload)
+  MachineFingerprint fingerprint = 2; // Hardware fingerprint of contestant machine
+  string agent_version = 3;
+  string agent_binary_hash = 4;       // SHA-256 of agent binary
+}
+
+message EnrollmentResponse {
+  bool success = 1;
+  string message = 2;
+  string agent_id = 3;              // Assigned unique agent ID
+  string contestant_id = 4;         // Linked contestant UUID
+  string competition_id = 5;        // Linked competition UUID
+  AgentConfiguration config = 6;    // Initial configuration
+}
+
+message MachineFingerprint {
+  string hostname = 1;
+  string os = 2;                    // windows, linux, darwin
+  string os_version = 3;
+  string architecture = 4;         // amd64, arm64
+  int32 cpu_cores = 5;
+  int64 total_ram_mb = 6;
+  string gpu_name = 7;
+  int64 gpu_vram_mb = 8;
+  string mac_address = 9;          // Primary NIC MAC
+}
+
+message AgentConfiguration {
+  int32 heartbeat_interval_seconds = 1;
+  int32 process_scan_interval_seconds = 2;
+  int32 network_scan_interval_seconds = 3;
+  int32 resource_scan_interval_seconds = 4;
+
+  // Detection rules
+  repeated string ai_process_names = 10;     // Process names to flag
+  repeated string ai_domains = 11;           // Domains to flag
+  repeated string model_file_extensions = 12; // File extensions to scan
+
+  // Server endpoints
+  string telemetry_endpoint = 20;
+  string heartbeat_endpoint = 21;
+}
+
+message StatusRequest {
+  string agent_id = 1;
+  string contestant_id = 2;
+}
+
+message StatusResponse {
+  bool enrolled = 1;
+  bool active = 2;                  // Competition is still active
+  string competition_status = 3;   // draft, active, completed
+  string message = 4;
+}

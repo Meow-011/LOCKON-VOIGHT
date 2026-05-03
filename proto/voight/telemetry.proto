@@ -1,0 +1,115 @@
+// LOCKON VOIGHT — Telemetry Protocol Buffer Definition
+// Defines the data structures and gRPC service for Agent → Server communication.
+
+syntax = "proto3";
+
+package voight;
+
+option go_package = "github.com/lockon/voight-agent/proto/voight";
+
+import "google/protobuf/timestamp.proto";
+
+// ═══════════════════════════════════════════════
+// Telemetry Service — Agent reports data to Server
+// ═══════════════════════════════════════════════
+
+service TelemetryService {
+  // Stream telemetry data from agent to server
+  rpc StreamTelemetry(stream TelemetryReport) returns (TelemetryAck);
+
+  // Send a single heartbeat
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+// ─────────────────────────────────────────────
+// Messages
+// ─────────────────────────────────────────────
+
+message TelemetryReport {
+  string agent_id = 1;
+  string contestant_id = 2;
+  google.protobuf.Timestamp timestamp = 3;
+
+  // One of the following will be populated per report
+  oneof payload {
+    ProcessSnapshot process_snapshot = 10;
+    NetworkEvent network_event = 11;
+    ResourceSnapshot resource_snapshot = 12;
+    FileAlert file_alert = 13;
+  }
+}
+
+message TelemetryAck {
+  bool success = 1;
+  string message = 2;
+  int32 events_received = 3;
+}
+
+// ─── Process Monitoring ──────────────────────
+
+message ProcessSnapshot {
+  repeated ProcessInfo processes = 1;
+}
+
+message ProcessInfo {
+  string name = 1;
+  int32 pid = 2;
+  string cmdline = 3;
+  float cpu_percent = 4;
+  float memory_mb = 5;
+  string category = 6;  // AI_EDITOR, LOCAL_LLM, AI_AGENT, NORMAL
+}
+
+// ─── Network Monitoring ─────────────────────
+
+message NetworkEvent {
+  string dst_domain = 1;
+  string dst_ip = 2;
+  int32 dst_port = 3;
+  string protocol = 4;   // TCP, UDP, DNS
+  string verdict = 5;    // AI_SERVICE, SAFE, UNKNOWN
+}
+
+// ─── Resource Monitoring ────────────────────
+
+message ResourceSnapshot {
+  float cpu_percent = 1;
+  float ram_percent = 2;
+  float gpu_percent = 3;
+  float vram_mb = 4;
+}
+
+// ─── File Scanner ───────────────────────────
+
+message FileAlert {
+  string file_path = 1;
+  string file_name = 2;
+  int64 file_size_bytes = 3;
+  string file_type = 4;   // GGUF, SAFETENSORS, BIN
+  string hash_sha256 = 5;
+}
+
+// ─── Heartbeat ──────────────────────────────
+
+message HeartbeatRequest {
+  string agent_id = 1;
+  string contestant_id = 2;
+  string agent_version = 3;
+  string agent_binary_hash = 4;  // SHA-256 of the running binary
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+message HeartbeatResponse {
+  bool acknowledged = 1;
+  int32 heartbeat_interval_seconds = 2;  // Server can adjust interval
+  AgentConfig config_update = 3;         // Optional config push
+  bool deploy_warning_payload = 4;       // Command to lock screen
+}
+
+message AgentConfig {
+  int32 process_scan_interval_seconds = 1;
+  int32 network_scan_interval_seconds = 2;
+  int32 resource_scan_interval_seconds = 3;
+  repeated string additional_ai_domains = 4;     // Extra domains to watch
+  repeated string additional_ai_processes = 5;   // Extra process names to flag
+}

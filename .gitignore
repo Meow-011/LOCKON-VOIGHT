@@ -1,0 +1,76 @@
+# LOCKON VOIGHT — .gitignore
+
+# ── Environment ──
+.env
+*.env.local
+.env.production
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+venv/
+.venv/
+
+# ── Go ──
+agent/bin/
+agent/bundle/
+agent/*.exe
+agent/voight-sentinel-*
+agent/temp_zip_test/
+agent/test.zip
+agent/test_win.go
+agent/github.com/
+agent/voight/
+agent/*.syso
+
+# ── Node.js ──
+node_modules/
+dashboard/dist/
+.vite/
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Docker ──
+deploy/.env
+
+# ── Certs (never commit!) ──
+deploy/certs/*.key
+deploy/certs/*.crt
+deploy/certs/*.pem
+deploy/certs/agents/
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── Test artifacts ──
+tests/results/
+*.log
+
+# ── Database ──
+*.db
+*.sqlite
+
+# ── Server runtime ──
+server/uploads/
+server/settings.json
+
+# ── Protobuf compiler (downloaded) ──
+protoc/
+protoc.zip
+
+# ── Build artifacts ──
+dashboard/public/downloads/*.zip
+
+# ── Scratch / one-off test scripts ──
+test.go
+test_*.py
+details.txt

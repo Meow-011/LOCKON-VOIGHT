@@ -1,0 +1,49 @@
+# LOCKON VOIGHT — Docker Compose (Development)
+# PostgreSQL + TimescaleDB + Redis
+
+services:
+  # ─────────────────────────────────────────────
+  # PostgreSQL with TimescaleDB extension
+  # ─────────────────────────────────────────────
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: voight-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: voight_db
+      POSTGRES_USER: voight
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Nhy1xjZ4cz16eXMNU9_-meNoS6zswUhV}
+    ports:
+      - "5432:5432"
+    volumes:
+      - voight_pgdata:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voight -d voight_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Redis (Cache + Celery Broker)
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: voight-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - voight_redis:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  voight_pgdata:
+    driver: local
+  voight_redis:
+    driver: local

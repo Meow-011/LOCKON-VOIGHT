@@ -119,6 +119,12 @@ LOCKON VOIGHT goes beyond simple string matching. It implements several advanced
    - *The Threat:* Over-aggressive process scanning flagging dormant VPN services (`tailscaled.exe`) or Windows 11 built-in Copilot background tasks, resulting in mass false-positive lockouts.
    - *The Mitigation:* VOIGHT separates active network telemetry from passive process execution. Built-in system AI tasks and standard CTF infrastructure tools (OpenVPN, WireGuard) are excluded from the hardcoded blocklist. Detection relies on active Window Focus and DNS resolutions.
 
+</br>
+
+<div align="center">
+  <img src="images/Blade-Runner.gif" alt="Blade Runner"/>
+</div>
+
 ## Telemetry & Privacy Scope
 
 LOCKON VOIGHT is designed with ethical hacking and participant privacy in mind. While the Agent monitors system activity to ensure competition integrity, it strictly limits its scope.

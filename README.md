@@ -4,6 +4,8 @@
   <h1>LOCKON VOIGHT</h1>
 
   <p>
+    <img src="https://img.shields.io/badge/Status-In%20Development-FF8C00?style=flat-square" alt="Status" />
+    <img src="https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square" alt="License" />
     <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go" alt="Go Version" />
     <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python" alt="Python Version" />
     <img src="https://img.shields.io/badge/React-18+-61DAFB?style=flat-square&logo=react" alt="React" />
@@ -11,7 +13,9 @@
     <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker" alt="Docker" />
   </p>
 
-  <p><strong>AI Detection & Proctoring System for CTF Competitions</strong></p>
+  <p><strong>A Digital Voight-Kampff Test: Distinguishing Human Hackers from Synthetic Assistance in Real-Time.</strong></p>
+  
+  > ⚠️ **Development Status:** LOCKON VOIGHT is currently an active Work In Progress (WIP). Core features are functional, but APIs and UI components are subject to change.
 </div>
 
 ---
@@ -428,5 +432,7 @@ LOCKON-VOIGHT/
 ├── tests/                  # Load, detection, security tests
 └── docs/                   # Documentation
 ```
+## License
 
-Proprietary - LOCKON Project. All rights reserved.
+This project is licensed under the **GNU General Public License v3.0 (GPLv3)**.  
+You are free to use, modify, and distribute this software, provided that any derivative works are also open-sourced under the same license. See the [LICENSE](LICENSE) file for more details.

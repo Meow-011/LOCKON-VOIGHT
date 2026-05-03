@@ -1,7 +1,7 @@
 <div align="center">
   <img src="server/app/static/Logo.png" alt="LOCKON VOIGHT Logo" width="400" />
 
-  <h1>LOCKON VOIGHT — Integrity Protocol</h1>
+  <h1>LOCKON VOIGHT</h1>
 
   <p>
     <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go" alt="Go Version" />
@@ -17,24 +17,16 @@
 ---
 
 > *"Is this testing whether I'm a replicant or a lesbian, Mr. Deckard?"* 
-> — **Blade Runner (1982)**
+> - **Blade Runner (1982)**
 
 ### The Voight-Kampff Protocol
 
 In the cyberpunk classic *Blade Runner*, the Voight-Kampff (V-K) machine is an advanced polygraph used to distinguish synthetic Replicants (AI) from authentic humans through autonomic responses. 
 
-**LOCKON VOIGHT** brings this concept into the modern cyber-warfare era. It is a real-time telemetry monitoring system designed to administer a digital "Voight-Kampff test" to connected endpoints. By analyzing process trees, local DNS profiling, and hardware resource spikes, VOIGHT distinguishes **authentic human problem-solving** from **unauthorized synthetic assistance** (e.g., ChatGPT, GitHub Copilot, local LLMs) during high-stakes cybersecurity competitions and CTF events.
-
----
-
-## System Previews
+**LOCKON VOIGHT** (Integrity Protocol) brings this concept into the modern cyber-warfare era. It is a real-time telemetry monitoring system designed to administer a digital "Voight-Kampff test" to connected endpoints. By analyzing process trees, local DNS profiling, and hardware resource spikes, VOIGHT distinguishes **authentic human problem-solving** from **unauthorized synthetic assistance** (e.g., ChatGPT, GitHub Copilot, local LLMs) during high-stakes cybersecurity competitions and CTF events.
 
 <div align="center">
   <img src="images/Dashboard-preview.png" alt="Fleet Command Dashboard Preview" width="800" />
-  <p><em>Fleet Command Dashboard — Real-time Node Monitoring & Incident Triage</em></p>
-  <br/>
-  <img src="images/Lock-screen-preview.jpg" alt="Tactical Screen Lock Preview" width="800" />
-  <p><em>Tactical Screen Lock — Instant Endpoint Isolation</em></p>
 </div>
 
 ---
@@ -80,6 +72,10 @@ In the cyberpunk classic *Blade Runner*, the Voight-Kampff (V-K) machine is an a
 - **Live Operation Timers (T+)**: Automated mission duration tracking that synchronizes with competition states, providing a pulsing `T+ 00:00:00` display for active missions.
 - **Decoupled State Management**: Zero-flash UI updates using TanStack Query and WebSocket data streams for instantaneous integrity badge updates.
 - **Zero-Trust Sentinel Enrollment**: Automated token generation for agents, ensuring robust node identity mapping via hardware fingerprinting (MAC, CPU UUID).
+
+<div align="center">
+  <img src="images/Lock-screen-preview.jpg" alt="Tactical Screen Lock Preview" width="800" />
+</div>
 
 ## Replicant Behavior Profiling (IoA Detection)
 
@@ -154,7 +150,7 @@ All API endpoints are protected with a layered security model:
 | **Contestant Validation** | All Telemetry ingestion endpoints | `contestant_id` existence check |
 | **WebSocket Authentication** | Real-time data feeds | JWT token via query parameter (enforced in production) |
 | **Login Rate Limiting** | `/api/auth/login` | 5 attempts per IP per 60 seconds |
-| **File Upload Validation** | Banner uploads | Allowed types: `png, jpg, jpeg, gif, webp` — Max size: 10MB |
+| **File Upload Validation** | Banner uploads | Allowed types: `png, jpg, jpeg, gif, webp` - Max size: 10MB |
 | **JWT Startup Guard** | Server boot | Refuses to start in production with default secret key |
 | **CORS Restriction** | Cross-origin requests | Explicit origin allowlist (no wildcards in production) |
 | **Public Endpoint Isolation** | Agent Download page | Only `competitionKey` exposed via `/api/settings/public` |
@@ -277,7 +273,7 @@ Once the services start, the Dashboard will open at `http://localhost:5173`.
 Contestants can download the Agent directly from the Dashboard without needing to log in:
 1. Navigate to `http://<YOUR_SERVER_IP>:5173/download`
 2. Select the appropriate platform (Windows / Linux / macOS)
-3. Click **DOWNLOAD BUNDLE** — the ZIP is automatically packaged with the server's `competition_key` and IP address
+3. Click **DOWNLOAD BUNDLE** - the ZIP is automatically packaged with the server's `competition_key` and IP address
 4. Extract, edit `config.json` to set `team_name`, and run with Administrator/root privileges
 
 ### Step 6: Building & Customizing the Agent (For Developers)
@@ -348,8 +344,8 @@ We welcome contributions to expand VOIGHT's detection capabilities:
 - [ ] **Offline Payload Execution:** Allow the Agent to trigger the Tactical Screen Lock autonomously if a network isolation attack is detected for more than 30 seconds.
 - [ ] **Linux DNS Cache Profiling:** Implement reliable DNS cache extraction on Linux via `systemd-resolved` / `nscd` / `dnsmasq` log parsing to achieve full parity with the Windows `Get-DnsClientCache` approach.
 - [ ] **Linux Screen Lock (X11/Wayland):** Port the Tactical Screen Lock payload to Linux desktops using GTK/Qt overlays with X11 and Wayland compositor support.
-- [ ] **macOS Complete Parity:** Expand the Darwin agent to achieve full feature parity — including DNS cache extraction, GPU monitoring via Metal Performance Shaders, native Screen Lock (Swift/AppKit), and robust `launchd`-based Watchdog protection.
-- [ ] **Agent GUI Interface:** Build a native graphical interface for the Sentinel Agent, providing contestants with a visible system tray / status panel showing connection health, enrollment status, and real-time heartbeat indicators — replacing the current headless CLI-only operation.
+- [ ] **macOS Complete Parity:** Expand the Darwin agent to achieve full feature parity - including DNS cache extraction, GPU monitoring via Metal Performance Shaders, native Screen Lock (Swift/AppKit), and robust `launchd`-based Watchdog protection.
+- [ ] **Agent GUI Interface:** Build a native graphical interface for the Sentinel Agent, providing contestants with a visible system tray / status panel showing connection health, enrollment status, and real-time heartbeat indicators - replacing the current headless CLI-only operation.
 
 ## Frequently Asked Questions (FAQ)
 
@@ -390,11 +386,11 @@ This project stands on the shoulders of several incredible open-source projects:
 
 ## Documentation
 
-- [Deployment Guide](docs/deployment-guide.md) — Setup, config, and troubleshooting
-- [Proctor User Guide](docs/proctor-guide.md) — How to use the Dashboard
-- [Scoring Algorithm](docs/scoring-algorithm.md) — IoA weights and decay formula
-- [Privacy Policy](docs/privacy-policy.md) — PDPA/GDPR compliance
-- **Interactive API Docs (Swagger UI)** — Available at `http://localhost:8000/docs` during development. Automatically hidden when `ENVIRONMENT=production`.
+- [Deployment Guide](docs/deployment-guide.md) - Setup, config, and troubleshooting
+- [Proctor User Guide](docs/proctor-guide.md) - How to use the Dashboard
+- [Scoring Algorithm](docs/scoring-algorithm.md) - IoA weights and decay formula
+- [Privacy Policy](docs/privacy-policy.md) - PDPA/GDPR compliance
+- **Interactive API Docs (Swagger UI)** - Available at `http://localhost:8000/docs` during development. Automatically hidden when `ENVIRONMENT=production`.
 
 ## Project Structure
 
@@ -423,6 +419,4 @@ LOCKON-VOIGHT/
 └── docs/                   # Documentation
 ```
 
-## License
-
-Proprietary — LOCKON Project. All rights reserved.
+Proprietary - LOCKON Project. All rights reserved.

@@ -25,6 +25,8 @@ In the cyberpunk classic *Blade Runner*, the Voight-Kampff (V-K) machine is an a
 
 **LOCKON VOIGHT** (Integrity Protocol) brings this concept into the modern cyber-warfare era. It is a real-time telemetry monitoring system designed to administer a digital "Voight-Kampff test" to connected endpoints. By analyzing process trees, local DNS profiling, and hardware resource spikes, VOIGHT distinguishes **authentic human problem-solving** from **unauthorized synthetic assistance** (e.g., ChatGPT, GitHub Copilot, local LLMs) during high-stakes cybersecurity competitions and CTF events.
 
+</br>
+
 <div align="center">
   <img src="images/Dashboard-preview.png" alt="Fleet Command Dashboard Preview" width="800" />
 </div>
@@ -72,6 +74,8 @@ In the cyberpunk classic *Blade Runner*, the Voight-Kampff (V-K) machine is an a
 - **Live Operation Timers (T+)**: Automated mission duration tracking that synchronizes with competition states, providing a pulsing `T+ 00:00:00` display for active missions.
 - **Decoupled State Management**: Zero-flash UI updates using TanStack Query and WebSocket data streams for instantaneous integrity badge updates.
 - **Zero-Trust Sentinel Enrollment**: Automated token generation for agents, ensuring robust node identity mapping via hardware fingerprinting (MAC, CPU UUID).
+
+</br>
 
 <div align="center">
   <img src="images/Lock-screen-preview.jpg" alt="Tactical Screen Lock Preview" width="800" />

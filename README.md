@@ -122,7 +122,7 @@ LOCKON VOIGHT goes beyond simple string matching. It implements several advanced
 </br>
 
 <div align="center">
-  <img src="images/Blade-Runner.gif" alt="Blade Runner"/>
+  <img src="images/Blade-runner.gif" alt="Blade Runner"/>
 </div>
 
 ## Telemetry & Privacy Scope

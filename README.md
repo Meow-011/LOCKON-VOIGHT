@@ -20,8 +20,6 @@
 
 ---
 
-</br>
-
 > *"Is this testing whether I'm a replicant or a lesbian, Mr. Deckard?"* 
 > - **Blade Runner (1982)**
 

@@ -27,8 +27,8 @@ if ($LASTEXITCODE -ne 0) {
 cd ..
 
 # 3. Wait for Postgres to be ready (simple delay)
-Write-Host "[3/5] Waiting for Database to initialize..." -ForegroundColor Yellow
-Start-Sleep -Seconds 5
+Write-Host "[3/5] Waiting for Database to initialize (this may take longer on first boot)..." -ForegroundColor Yellow
+Start-Sleep -Seconds 15
 
 # 4. Database Migrations
 Write-Host "[4/5] Running Database Migrations..." -ForegroundColor Yellow

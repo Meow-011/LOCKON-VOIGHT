@@ -5,6 +5,7 @@ if (Test-Path "bundle") { Remove-Item "bundle" -Recurse -Force }
 New-Item -ItemType Directory -Force -Path bundle\windows | Out-Null
 New-Item -ItemType Directory -Force -Path bundle\linux | Out-Null
 New-Item -ItemType Directory -Force -Path bundle\macos | Out-Null
+New-Item -ItemType Directory -Force -Path "../dashboard/public/downloads" | Out-Null
 
 # 1. Build Windows
 Write-Host "Building for Windows..." -ForegroundColor Yellow

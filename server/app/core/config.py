@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # gRPC
-    GRPC_PORT: int = 50051
+    GRPC_PORT: int = 50052
     GRPC_MAX_WORKERS: int = 10
 
     # Agent

@@ -12,7 +12,7 @@ services:
     environment:
       POSTGRES_DB: voight_db
       POSTGRES_USER: voight
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Nhy1xjZ4cz16eXMNU9_-meNoS6zswUhV}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voight_secret}
     ports:
       - "5432:5432"
     volumes:

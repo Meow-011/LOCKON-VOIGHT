@@ -100,9 +100,13 @@ func buildProcessMap(cfg *config.Config) map[string]ProcessCategory {
 		m[strings.ToLower(name)] = CategoryAIAgent
 	}
 
-	// Evasion Tools (Proxy, Darknet)
+	// Evasion Tools (Proxy, Darknet, Tunnels)
 	evasionTools := []string{
 		"tor.exe", "v2ray", "shadowsocks",
+		"chisel", "chisel.exe",
+		"frp", "frpc", "frpc.exe",
+		"ngrok", "ngrok.exe",
+		"cloudflared", "cloudflared.exe",
 	}
 	for _, name := range evasionTools {
 		m[strings.ToLower(name)] = CategoryEvasion

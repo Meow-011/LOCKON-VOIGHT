@@ -7,6 +7,17 @@ New-Item -ItemType Directory -Force -Path bundle\linux | Out-Null
 New-Item -ItemType Directory -Force -Path bundle\macos | Out-Null
 New-Item -ItemType Directory -Force -Path "../dashboard/public/downloads" | Out-Null
 
+$configTemplate = @'
+{
+  "server_address": "localhost",
+  "grpc_port": 50052,
+  "team_name": "YOUR_TEAM_NAME_HERE",
+  "contestant_name": "YOUR_ALIAS_HERE",
+  "competition_key": "GLOBAL_COMP_KEY_12345",
+  "use_tls": false
+}
+'@
+
 # 1. Build Windows
 Write-Host "Building for Windows..." -ForegroundColor Yellow
 $env:GOOS="windows"
@@ -16,7 +27,7 @@ go build -ldflags="-s -w" -o bin/voight-sentinel.exe ./cmd/voight
 # Create Windows Bundle
 Copy-Item "bin/voight-sentinel.exe" "bundle\windows\"
 Set-Content "bundle\windows\README.txt" "LOCKON VOIGHT Sentinel - Windows`n`n1. Extract all files to a folder.`n2. Open config.json and set your team_name.`n3. Run voight-sentinel.exe as Administrator."
-Set-Content "bundle\windows\config.json" "{}"
+Set-Content "bundle\windows\config.json" $configTemplate
 if (Test-Path "../dashboard/public/downloads/voight-sentinel-windows-bundle.zip") {
     Remove-Item "../dashboard/public/downloads/voight-sentinel-windows-bundle.zip" -Force
 }
@@ -31,7 +42,7 @@ go build -ldflags="-s -w" -o bin/voight-sentinel-linux ./cmd/voight
 # Create Linux Bundle
 Copy-Item "bin/voight-sentinel-linux" "bundle\linux\"
 Set-Content "bundle\linux\README.txt" "LOCKON VOIGHT Sentinel - Linux`n`n1. Extract all files to a folder.`n2. Open config.json and set your team_name.`n3. Run 'chmod +x voight-sentinel-linux'.`n4. Run 'sudo ./voight-sentinel-linux'."
-Set-Content "bundle\linux\config.json" "{}"
+Set-Content "bundle\linux\config.json" $configTemplate
 if (Test-Path "../dashboard/public/downloads/voight-sentinel-linux-bundle.zip") {
     Remove-Item "../dashboard/public/downloads/voight-sentinel-linux-bundle.zip" -Force
 }
@@ -46,7 +57,7 @@ go build -ldflags="-s -w" -o bin/voight-sentinel-darwin ./cmd/voight
 # Create macOS Bundle
 Copy-Item "bin/voight-sentinel-darwin" "bundle\macos\"
 Set-Content "bundle\macos\README.txt" "LOCKON VOIGHT Sentinel - macOS`n`n1. Extract all files to a folder.`n2. Open config.json and set your team_name.`n3. Run 'chmod +x voight-sentinel-darwin'.`n4. Run 'sudo ./voight-sentinel-darwin'."
-Set-Content "bundle\macos\config.json" "{}"
+Set-Content "bundle\macos\config.json" $configTemplate
 if (Test-Path "../dashboard/public/downloads/voight-sentinel-macos-bundle.zip") {
     Remove-Item "../dashboard/public/downloads/voight-sentinel-macos-bundle.zip" -Force
 }

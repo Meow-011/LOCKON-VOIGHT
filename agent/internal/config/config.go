@@ -113,6 +113,20 @@ func DefaultConfig() *Config {
 			"api-inference.huggingface.co",
 			// Replicate
 			"api.replicate.com",
+			// xAI (Grok)
+			"x.ai",
+			"api.x.ai",
+			// OpenRouter
+			"openrouter.ai",
+			"api.openrouter.ai",
+			// Mistral Chat
+			"chat.mistral.ai",
+			// ChatGPT (New domain)
+			"chatgpt.com",
+			// Other enterprise AI inference
+			"api.fireworks.ai",
+			"api.cerebras.ai",
+			"api.sambanova.ai",
 		},
 
 		// Model file extensions to scan

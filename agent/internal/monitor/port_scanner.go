@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -130,8 +132,9 @@ type probeTarget struct {
 	Source string // e.g., "localhost", "VMware", "VirtualBox"
 }
 
-// getProbeTargets returns localhost + any discovered VM NAT gateway IPs.
+// getProbeTargets returns localhost + any discovered VM NAT gateway IPs + live VM guests.
 // VM NAT gateways are typically at .1 or .2 of the VM's subnet.
+// Live VM guests are discovered via the OS ARP table.
 func (ps *PortScanner) getProbeTargets() []probeTarget {
 	targets := []probeTarget{
 		{IP: "127.0.0.1", Source: "localhost"},
@@ -162,6 +165,13 @@ func (ps *PortScanner) getProbeTargets() []probeTarget {
 	seen := make(map[string]bool)
 	seen["127.0.0.1"] = true
 
+	// Track VM subnets for ARP scanning
+	type vmSubnet struct {
+		Network *net.IPNet
+		Label   string
+	}
+	var vmSubnets []vmSubnet
+
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 {
 			continue // skip down interfaces
@@ -186,9 +196,11 @@ func (ps *PortScanner) getProbeTargets() []probeTarget {
 
 		for _, addr := range addrs {
 			var ip net.IP
+			var ipNet *net.IPNet
 			switch v := addr.(type) {
 			case *net.IPNet:
 				ip = v.IP
+				ipNet = v
 			case *net.IPAddr:
 				ip = v.IP
 			}
@@ -198,7 +210,6 @@ func (ps *PortScanner) getProbeTargets() []probeTarget {
 			}
 
 			// The host's IP on the VM interface IS the gateway from the VM's perspective.
-			// e.g., host has 192.168.152.1 on vmnet8 -> VM sees this as its gateway.
 			hostIP := ip.String()
 			if !seen[hostIP] {
 				seen[hostIP] = true
@@ -212,6 +223,36 @@ func (ps *PortScanner) getProbeTargets() []probeTarget {
 				seen[gatewayIP] = true
 				targets = append(targets, probeTarget{IP: gatewayIP, Source: vmLabel})
 			}
+
+			// Remember this subnet for ARP scanning
+			if ipNet != nil {
+				vmSubnets = append(vmSubnets, vmSubnet{Network: ipNet, Label: vmLabel})
+			}
+		}
+	}
+
+	// ── ARP Table Scanning ──
+	// Discover live VM guest IPs by reading the OS ARP cache.
+	// This catches VMs with DHCP-assigned IPs (e.g., 192.168.152.128)
+	// that we can't predict from the host interface alone.
+	arpIPs := ps.discoverARPHosts()
+	for _, arpEntry := range arpIPs {
+		if seen[arpEntry] {
+			continue
+		}
+
+		arpIP := net.ParseIP(arpEntry)
+		if arpIP == nil {
+			continue
+		}
+
+		// Only include ARP entries that belong to a VM subnet
+		for _, subnet := range vmSubnets {
+			if subnet.Network.Contains(arpIP) {
+				seen[arpEntry] = true
+				targets = append(targets, probeTarget{IP: arpEntry, Source: subnet.Label})
+				break
+			}
 		}
 	}
 
@@ -220,6 +261,74 @@ func (ps *PortScanner) getProbeTargets() []probeTarget {
 	}
 
 	return targets
+}
+
+// discoverARPHosts reads the OS ARP table to find live hosts on the network.
+// Returns a list of IP addresses that have been seen in the ARP cache.
+func (ps *PortScanner) discoverARPHosts() []string {
+	var ips []string
+
+	switch runtime.GOOS {
+	case "windows":
+		// Windows: arp -a
+		out, err := exec.Command("arp", "-a").Output()
+		if err != nil {
+			return ips
+		}
+		// Parse lines like: "  192.168.152.128     00-0c-29-xx-xx-xx     dynamic"
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			fields := strings.Fields(line)
+			if len(fields) >= 3 {
+				ip := net.ParseIP(fields[0])
+				if ip != nil && ip.To4() != nil && !ip.IsLoopback() {
+					ips = append(ips, fields[0])
+				}
+			}
+		}
+
+	case "linux":
+		// Linux: ip neigh (preferred) or arp -a
+		out, err := exec.Command("ip", "neigh").Output()
+		if err != nil {
+			out, err = exec.Command("arp", "-a").Output()
+			if err != nil {
+				return ips
+			}
+		}
+		// Parse lines like: "192.168.152.128 dev vmnet8 lladdr 00:0c:29:xx:xx:xx REACHABLE"
+		for _, line := range strings.Split(string(out), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 1 {
+				ip := net.ParseIP(fields[0])
+				if ip != nil && ip.To4() != nil && !ip.IsLoopback() {
+					ips = append(ips, fields[0])
+				}
+			}
+		}
+
+	case "darwin":
+		// macOS: arp -a
+		out, err := exec.Command("arp", "-a").Output()
+		if err != nil {
+			return ips
+		}
+		// Parse lines like: "? (192.168.152.128) at 00:0c:29:xx:xx:xx on vmnet8"
+		for _, line := range strings.Split(string(out), "\n") {
+			// Extract IP from parentheses
+			start := strings.Index(line, "(")
+			end := strings.Index(line, ")")
+			if start >= 0 && end > start {
+				ipStr := line[start+1 : end]
+				ip := net.ParseIP(ipStr)
+				if ip != nil && ip.To4() != nil && !ip.IsLoopback() {
+					ips = append(ips, ipStr)
+				}
+			}
+		}
+	}
+
+	return ips
 }
 
 // isPortOpenAt checks if a TCP port is listening on a specific IP address.

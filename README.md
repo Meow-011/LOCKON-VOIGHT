@@ -115,18 +115,22 @@ LOCKON VOIGHT goes beyond simple string matching. It implements several advanced
      2. **Cryptographic Code Signing Verification:** On **Windows**, the Agent reads Authenticode certificates. On **macOS**, it verifies Apple Developer IDs via `codesign`. On **Linux**, it inspects ELF binary metadata, embedded build paths, and queries `dpkg`/`rpm` for package provenance.
      3. **Behavioral Port Scanning:** AI runtimes inherently require opening a local server (e.g., port 11434 for Ollama, 1234 for LM Studio). VOIGHT continuously probes these known TCP ports on `localhost`.
 
-3. **Behavioral Port Scanning (Detecting Local Runtimes)**
-   - *The Threat:* A contestant compiles a custom, unsigned binary of an open-source LLM runtime, rendering name, path, and signature checks ineffective.
-   - *The Mitigation:* AI runtimes inherently require opening a local server. VOIGHT continuously probes known TCP ports on `localhost`. If a port is actively listening, it serves as an undeniable behavioral indicator of an AI server, regardless of the executable's camouflage.
+3. **Behavioral Port Scanning (Detecting Local & Virtualized Runtimes)**
+   - *The Threat:* A contestant compiles a custom, unsigned binary of an open-source LLM runtime, rendering name, path, and signature checks ineffective. Or they run AI inside a VM with NAT networking to hide the process from the host.
+   - *The Mitigation:* VOIGHT probes known AI TCP ports (e.g., 11434, 1234, 5001) on **localhost AND dynamically-discovered VM NAT subnets**. The Agent auto-detects VMware (`vmnet`), VirtualBox (`vboxnet`), KVM (`virbr`), Hyper-V (`vethernet`), and Docker bridge interfaces, then probes AI ports on their gateway IPs. VM-based detections are always flagged as intentional.
 
-4. **Subsystem & Virtualization Fallbacks (WSL2 / Docker)**
-   - *The Threat:* Contestants run local LLMs inside Windows Subsystem for Linux (WSL2) or Docker to hide the internal Linux processes from the Windows Agent.
-   - *The Mitigation:* VOIGHT automatically flags `wsl.exe`, `vmmemwsl`, and `docker.exe`. Even if the internal processes are obfuscated, any AI workload will trigger the **Resource Monitor** (detecting unnatural VRAM/GPU or RAM spikes mapped to the VM).
+4. **Subsystem & Virtualization Fallbacks (WSL2 / Docker / VM NAT)**
+   - *The Threat:* Contestants run local LLMs inside Windows Subsystem for Linux (WSL2), Docker, or a full VM (VMware/VirtualBox) to hide the internal processes from the host Agent.
+   - *The Mitigation:* VOIGHT automatically flags `wsl.exe`, `vmmemwsl`, and `docker.exe`. Additionally, the **Network Monitor** detects any outbound connection to a private IP (`10.x.x.x`, `172.16.x.x`, `192.168.x.x`) on a known AI port (e.g., `:11434`) and flags it as `AI_SERVICE`, catching cross-machine or VM-to-host AI usage.
 
-5. **Dynamic Centralized Configurations & Policy Enforcement**
+5. **SSH Tunnel & Reverse Proxy Evasion Detection**
+   - *The Threat:* A contestant uses `ssh -L 11434:localhost:11434 remote-server` to tunnel a remote Ollama instance through SSH, or uses `socat` / `netsh portproxy` to forward AI ports from another machine.
+   - *The Mitigation:* VOIGHT scans the command-line arguments (`cmdline`) of every running process. If `ssh` with `-L`/`-R` flags is detected alongside a known AI port number, or if `socat`/`portproxy` references an AI port, the process is immediately flagged as an AI evasion attempt.
+
+6. **Dynamic Centralized Configurations & Policy Enforcement**
    - The Detection Policy (Blocked Domains, Processes, and File Extensions) as well as Core System Configurations (Agent Scan Intervals, Heartbeat Frequencies) are pushed dynamically from the Proctor Dashboard to all Agents via the REST API (with graceful fallback to gRPC Heartbeats if blocked), taking effect system-wide within 60 seconds without restarting the Agents.
 
-6. **False Positive Suppression & Passive Background Filtering**
+7. **False Positive Suppression & Passive Background Filtering**
    - *The Threat:* Over-aggressive process scanning flagging dormant VPN services (`tailscaled.exe`) or Windows 11 built-in Copilot background tasks, resulting in mass false-positive lockouts.
    - *The Mitigation:* VOIGHT separates active network telemetry from passive process execution. Built-in system AI tasks and standard CTF infrastructure tools (OpenVPN, WireGuard) are excluded from the hardcoded blocklist. Detection relies on active Window Focus and DNS resolutions.
 

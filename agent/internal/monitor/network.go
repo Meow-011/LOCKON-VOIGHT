@@ -169,12 +169,22 @@ func (nm *NetworkMonitor) Scan(ctx context.Context) ([]NetworkEvent, error) {
 	return events, nil
 }
 
-// updateDNSCache queries the Windows DNS Client Cache via PowerShell to map IPs to Domains.
+// updateDNSCache queries the OS DNS cache to map IPs to Domains.
 // This defeats CDN/Cloudflare IP masking because the local machine resolves the real domain first.
+// Supports: Windows (Get-DnsClientCache), macOS (log stream), Linux (journalctl).
 func (nm *NetworkMonitor) updateDNSCache() {
-	if runtime.GOOS != "windows" {
-		return
+	switch runtime.GOOS {
+	case "windows":
+		nm.updateDNSCacheWindows()
+	case "darwin":
+		nm.updateDNSCacheDarwin()
+	case "linux":
+		nm.updateDNSCacheLinux()
 	}
+}
+
+// updateDNSCacheWindows uses PowerShell Get-DnsClientCache to extract cached DNS entries.
+func (nm *NetworkMonitor) updateDNSCacheWindows() {
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", `Get-DnsClientCache | Select-Object Entry, Data | ConvertTo-Json`)
 	out, err := cmd.Output()
 	if err != nil {
@@ -203,6 +213,84 @@ func (nm *NetworkMonitor) updateDNSCache() {
 		// Map IP (Data) to Domain (Entry)
 		if e.Data != "" && e.Entry != "" {
 			nm.dnsCache[e.Data] = e.Entry
+		}
+	}
+}
+
+// updateDNSCacheDarwin uses macOS `log stream` to capture recent DNS resolutions.
+// macOS does not expose its DNS cache directly, so we parse mDNSResponder logs.
+func (nm *NetworkMonitor) updateDNSCacheDarwin() {
+	// Use `log show` to extract recent DNS resolutions from mDNSResponder (last 30 seconds)
+	cmd := exec.Command("log", "show", "--predicate", `process == "mDNSResponder" AND message CONTAINS "A?"`, "--last", "30s", "--style", "compact")
+	out, err := cmd.Output()
+	if err != nil {
+		// Fallback: try dscacheutil for basic lookups against known AI domains
+		nm.probeKnownDomainsDarwin()
+		return
+	}
+
+	nm.parseDNSLogEntries(string(out))
+}
+
+// probeKnownDomainsDarwin performs targeted DNS lookups for known AI domains on macOS.
+// This is a fallback when log parsing is not available (e.g., SIP restrictions).
+func (nm *NetworkMonitor) probeKnownDomainsDarwin() {
+	nm.mu.RLock()
+	domains := make([]string, 0, len(nm.domainMap))
+	for d := range nm.domainMap {
+		domains = append(domains, d)
+	}
+	nm.mu.RUnlock()
+
+	for _, domain := range domains {
+		ips, err := net.LookupHost(domain)
+		if err != nil {
+			continue
+		}
+		nm.mu.Lock()
+		for _, ip := range ips {
+			nm.dnsCache[ip] = domain
+		}
+		nm.mu.Unlock()
+	}
+}
+
+// updateDNSCacheLinux tries systemd-resolved journal logs to extract DNS resolutions.
+func (nm *NetworkMonitor) updateDNSCacheLinux() {
+	// Try journalctl for systemd-resolved logs (most common on modern distros)
+	cmd := exec.Command("journalctl", "-u", "systemd-resolved", "--since", "30s ago", "--no-pager", "-q")
+	out, err := cmd.Output()
+	if err != nil {
+		// Fallback: probe known domains directly
+		nm.probeKnownDomainsDarwin() // Same logic works for Linux
+		return
+	}
+
+	nm.parseDNSLogEntries(string(out))
+}
+
+// parseDNSLogEntries extracts domain-to-IP mappings from raw DNS log text.
+// Works with both macOS mDNSResponder and Linux systemd-resolved log formats.
+func (nm *NetworkMonitor) parseDNSLogEntries(logText string) {
+	lines := strings.Split(logText, "\n")
+	nm.mu.Lock()
+	defer nm.mu.Unlock()
+
+	for _, line := range lines {
+		lower := strings.ToLower(line)
+		// Look for known AI domains mentioned in log lines
+		for domain := range nm.domainMap {
+			if strings.Contains(lower, domain) {
+				// Try to extract an IP from the same line (common log patterns: "1.2.3.4" or "-> 1.2.3.4")
+				words := strings.Fields(line)
+				for _, w := range words {
+					cleaned := strings.Trim(w, "[](),:;")
+					ip := net.ParseIP(cleaned)
+					if ip != nil && !ip.IsLoopback() {
+						nm.dnsCache[cleaned] = domain
+					}
+				}
+			}
 		}
 	}
 }

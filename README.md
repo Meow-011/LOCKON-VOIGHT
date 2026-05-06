@@ -203,11 +203,14 @@ Due to deep structural differences in operating systems (and security sandboxing
 |---|:---:|:---:|:---:|---|
 | **Heartbeat & System Metrics** | 🟢 Native | 🟢 Native | 🟢 Native | CPU, RAM, Uptime syncing |
 | **Process Tracking (Basic)** | 🟢 Native | 🟢 Native | 🟢 Native | Process name, PID, basic command-line |
-| **Absolute Path Extraction** | 🟢 Native | 🟢 Native | 🟡 Limited | Used to defeat process renaming tricks |
-| **Local DNS Cache Extraction** | 🟢 PowerShell | 🟡 systemd | ❌ Planned | Core defense against IP/CDN masking |
-| **GPU / VRAM Monitoring** | 🟢 nvidia-smi | 🟢 nvidia-smi | ❌ Metal WIP | Used to detect local LLMs running on GPU |
-| **Tactical Screen Lock** | 🟢 WinForms | 🟡 X11/Wayland | ❌ Swift WIP | Aggressive full-screen visual payload |
-| **Tamper & Watchdog Protect**| 🟢 Registry | 🟢 systemd | 🟡 launchd | Restarts agent if forcefully closed |
+| **Absolute Path Extraction** | 🟢 Native | 🟢 Native | 🟢 Native | Used to defeat process renaming tricks (both `\` and `/` path separators) |
+| **Local DNS Cache Extraction** | 🟢 PowerShell | 🟢 journalctl | 🟢 mDNSResponder | Core defense against IP/CDN masking (with fallback domain probing) |
+| **GPU / VRAM Monitoring** | 🟢 nvidia-smi | 🟢 nvidia-smi | 🟢 ioreg | Apple Silicon uses IOAccelerator for unified memory GPU detection |
+| **Window Title Scanning** | 🟢 PowerShell | 🟢 xdotool+/proc | 🟢 AppleScript | Browser-only filtering with /proc fallback on headless Linux |
+| **Code Signing Verification** | 🟢 Authenticode | 🟢 ELF+dpkg/rpm | 🟢 codesign | Detects renamed AI executables via binary identity analysis |
+| **Behavioral Port Scanning** | 🟢 Native | 🟢 Native | 🟢 Native | Cross-platform TCP port probing for AI runtimes |
+| **Tactical Screen Lock** | 🟢 WinForms | 🟢 zenity | 🟢 AppleScript | Persistent fullscreen warning with 30s acknowledge countdown |
+| **Tamper & Watchdog Protect**| 🟢 Registry | 🟢 systemd | 🟢 launchd | Auto-restarts agent via native service manager |
 | **Dynamic Config Sync** | 🟢 Native | 🟢 Native | 🟢 Native | Real-time interval updates from Dashboard |
 
 *(Legend: 🟢 Fully Supported & Tested \| 🟡 Partial/WIP \| ❌ Planned for Future Release)*

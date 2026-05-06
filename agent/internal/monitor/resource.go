@@ -84,27 +84,26 @@ func (rm *ResourceMonitor) Scan(ctx context.Context) (ResourceSnapshot, error) {
 	return snapshot, nil
 }
 
-// getGPUMetrics queries nvidia-smi for GPU utilization and VRAM usage.
+// getGPUMetrics queries GPU utilization and VRAM usage.
+// Supports: NVIDIA (nvidia-smi) on Windows/Linux, Apple Silicon (ioreg) on macOS.
 func (rm *ResourceMonitor) getGPUMetrics() (gpuPercent float64, vramMB float64) {
-	var cmd *exec.Cmd
-
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("nvidia-smi",
-			"--query-gpu=utilization.gpu,memory.used",
-			"--format=csv,noheader,nounits")
-	} else {
-		cmd = exec.Command("nvidia-smi",
-			"--query-gpu=utilization.gpu,memory.used",
-			"--format=csv,noheader,nounits")
+	if runtime.GOOS == "darwin" {
+		return rm.getGPUMetricsDarwin()
 	}
+	return rm.getGPUMetricsNvidia()
+}
+
+// getGPUMetricsNvidia queries nvidia-smi for GPU utilization and VRAM usage.
+func (rm *ResourceMonitor) getGPUMetricsNvidia() (gpuPercent float64, vramMB float64) {
+	cmd := exec.Command("nvidia-smi",
+		"--query-gpu=utilization.gpu,memory.used",
+		"--format=csv,noheader,nounits")
 
 	output, err := cmd.Output()
 	if err != nil {
-		// nvidia-smi not available or no NVIDIA GPU
 		return 0, 0
 	}
 
-	// Parse output: "85, 4096"
 	parts := strings.Split(strings.TrimSpace(string(output)), ",")
 	if len(parts) >= 2 {
 		gpuStr := strings.TrimSpace(parts[0])
@@ -115,6 +114,48 @@ func (rm *ResourceMonitor) getGPUMetrics() (gpuPercent float64, vramMB float64) 
 		}
 		if v, err := strconv.ParseFloat(vramStr, 64); err == nil {
 			vramMB = v
+		}
+	}
+
+	return gpuPercent, vramMB
+}
+
+// getGPUMetricsDarwin queries Apple Silicon GPU utilization via ioreg.
+// Apple Silicon shares unified memory between CPU and GPU, so we report
+// GPU utilization percentage and the in-use system memory as a proxy for VRAM.
+func (rm *ResourceMonitor) getGPUMetricsDarwin() (gpuPercent float64, vramMB float64) {
+	// Use ioreg to check if GPU is under heavy load via performance state
+	cmd := exec.Command("ioreg", "-r", "-d", "1", "-c", "IOAccelerator")
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, 0
+	}
+
+	outputStr := string(output)
+
+	// Parse GPU utilization from IOAccelerator "Device Utilization %" property
+	gpuUtilRe := regexp.MustCompile(`"Device Utilization %"\s*=\s*(\d+)`)
+	if matches := gpuUtilRe.FindStringSubmatch(outputStr); len(matches) > 1 {
+		if v, err := strconv.ParseFloat(matches[1], 64); err == nil {
+			gpuPercent = v
+		}
+	}
+
+	// Parse VRAM (on unified memory Macs, this is "VRAM,totalMB" for allocated GPU memory)
+	vramRe := regexp.MustCompile(`"VRAM,totalMB"\s*=\s*(\d+)`)
+	if matches := vramRe.FindStringSubmatch(outputStr); len(matches) > 1 {
+		if v, err := strconv.ParseFloat(matches[1], 64); err == nil {
+			vramMB = v
+		}
+	}
+
+	// If VRAM not directly available, try to estimate via in-use GPU memory
+	if vramMB == 0 {
+		inUseRe := regexp.MustCompile(`"In use system memory"\s*=\s*(\d+)`)
+		if matches := inUseRe.FindStringSubmatch(outputStr); len(matches) > 1 {
+			if v, err := strconv.ParseFloat(matches[1], 64); err == nil {
+				vramMB = v / (1024 * 1024) // Convert bytes to MB
+			}
 		}
 	}
 

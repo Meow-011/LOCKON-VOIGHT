@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -193,12 +194,23 @@ func (pm *ProcessMonitor) Scan(ctx context.Context) ([]ProcessInfo, error) {
 	return snapshot, nil
 }
 
-// checkWindowTitles uses PowerShell to scan all active window titles for AI chat keywords.
+// checkWindowTitles scans all active window titles for AI chat keywords.
+// Supports: Windows (PowerShell), macOS (AppleScript), Linux (wmctrl).
 func (pm *ProcessMonitor) checkWindowTitles(ctx context.Context) ([]ProcessInfo, error) {
-	if runtime.GOOS != "windows" {
+	switch runtime.GOOS {
+	case "windows":
+		return pm.checkWindowTitlesWindows(ctx)
+	case "darwin":
+		return pm.checkWindowTitlesDarwin(ctx)
+	case "linux":
+		return pm.checkWindowTitlesLinux(ctx)
+	default:
 		return nil, nil
 	}
+}
 
+// checkWindowTitlesWindows uses PowerShell to scan active window titles.
+func (pm *ProcessMonitor) checkWindowTitlesWindows(ctx context.Context) ([]ProcessInfo, error) {
 	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-Command", `Get-Process | Where-Object {$_.MainWindowTitle -ne ""} | Select-Object Name, MainWindowTitle, Id | ConvertTo-Json`)
 	out, err := cmd.Output()
 	if err != nil {
@@ -281,6 +293,215 @@ func (pm *ProcessMonitor) checkWindowTitles(ctx context.Context) ([]ProcessInfo,
 	return detected, nil
 }
 
+// checkWindowTitlesDarwin uses AppleScript to scan active window titles on macOS.
+func (pm *ProcessMonitor) checkWindowTitlesDarwin(ctx context.Context) ([]ProcessInfo, error) {
+	// AppleScript to list all visible windows with their process name and title
+	script := `
+tell application "System Events"
+	set output to ""
+	repeat with proc in (every process whose visible is true)
+		set procName to name of proc
+		repeat with win in (every window of proc)
+			try
+				set winTitle to name of win
+				set output to output & procName & "|||" & winTitle & "
+"
+			end try
+		end repeat
+	end repeat
+	return output
+end tell`
+
+	cmd := exec.CommandContext(ctx, "osascript", "-e", script)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, nil // Silently fail if Accessibility permissions not granted
+	}
+
+	var detected []ProcessInfo
+	now := time.Now()
+
+	aiKeywords := []string{
+		"chatgpt", "claude", "gemini", "deepseek", "perplexity", "poe", "grok",
+	}
+	browsers := []string{"chrome", "safari", "firefox", "brave", "opera", "vivaldi", "arc", "edge", "waterfox", "orion"}
+
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		parts := strings.SplitN(line, "|||", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		procName := strings.TrimSpace(parts[0])
+		winTitle := strings.TrimSpace(parts[1])
+		lowerTitle := strings.ToLower(winTitle)
+		lowerProc := strings.ToLower(procName)
+
+		isAI := false
+		for _, kw := range aiKeywords {
+			if strings.Contains(lowerTitle, kw) {
+				isAI = true
+				break
+			}
+		}
+
+		if isAI {
+			// Only flag if the process is a known browser
+			isBrowser := false
+			for _, b := range browsers {
+				if strings.Contains(lowerProc, b) {
+					isBrowser = true
+					break
+				}
+			}
+
+			if isBrowser {
+				detected = append(detected, ProcessInfo{
+					Name:       procName,
+					PID:        0, // AppleScript doesn't return PID easily
+					Cmdline:    winTitle,
+					Category:   CategoryAIAgent,
+					DetectedAt: now,
+				})
+			}
+		}
+	}
+
+	return detected, nil
+}
+
+// checkWindowTitlesLinux scans active window titles on Linux.
+// Strategy: xdotool → wmctrl → /proc-based browser cmdline scan.
+func (pm *ProcessMonitor) checkWindowTitlesLinux(ctx context.Context) ([]ProcessInfo, error) {
+	aiKeywords := []string{
+		"chatgpt", "claude", "gemini", "deepseek", "perplexity", "poe", "grok",
+	}
+	browsers := []string{"chrome", "chromium", "firefox", "brave", "opera", "vivaldi"}
+
+	// Strategy 1: Try xdotool to list all windows with names (works on X11 + some Wayland via XWayland)
+	out, err := exec.CommandContext(ctx, "bash", "-c",
+		`xdotool search --name '' 2>/dev/null | while read wid; do xdotool getwindowname "$wid" 2>/dev/null; done`,
+	).Output()
+	if err != nil || len(out) == 0 {
+		// Strategy 2: Try wmctrl
+		out, err = exec.CommandContext(ctx, "wmctrl", "-l").Output()
+	}
+	if err != nil || len(out) == 0 {
+		// Strategy 3: Scan /proc for browser cmdlines containing AI keywords
+		return pm.scanProcCmdlinesLinux(ctx, aiKeywords, browsers)
+	}
+
+	var detected []ProcessInfo
+	now := time.Now()
+
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		lowerLine := strings.ToLower(line)
+		isAI := false
+		for _, kw := range aiKeywords {
+			if strings.Contains(lowerLine, kw) {
+				isAI = true
+				break
+			}
+		}
+
+		if isAI {
+			isBrowser := false
+			for _, b := range browsers {
+				if strings.Contains(lowerLine, b) {
+					isBrowser = true
+					break
+				}
+			}
+
+			if isBrowser {
+				detected = append(detected, ProcessInfo{
+					Name:       "[WindowTitle] " + line,
+					PID:        0,
+					Cmdline:    line,
+					Category:   CategoryAIAgent,
+					DetectedAt: now,
+				})
+			}
+		}
+	}
+
+	return detected, nil
+}
+
+// scanProcCmdlinesLinux reads /proc/PID/cmdline for known browser processes
+// to detect AI-related URLs or page titles in the command line arguments.
+// This works on ALL Linux systems (even headless) because /proc is always available.
+func (pm *ProcessMonitor) scanProcCmdlinesLinux(ctx context.Context, aiKeywords, browsers []string) ([]ProcessInfo, error) {
+	// List all PIDs from /proc
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, nil
+	}
+
+	var detected []ProcessInfo
+	now := time.Now()
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		// Skip non-numeric directories
+		pid := entry.Name()
+		if len(pid) == 0 || pid[0] < '0' || pid[0] > '9' {
+			continue
+		}
+
+		// Read cmdline
+		cmdlineBytes, err := os.ReadFile("/proc/" + pid + "/cmdline")
+		if err != nil {
+			continue
+		}
+
+		// cmdline fields are separated by null bytes
+		cmdline := strings.ToLower(strings.ReplaceAll(string(cmdlineBytes), "\x00", " "))
+
+		// Check if this is a browser process
+		isBrowser := false
+		for _, b := range browsers {
+			if strings.Contains(cmdline, b) {
+				isBrowser = true
+				break
+			}
+		}
+		if !isBrowser {
+			continue
+		}
+
+		// Check if cmdline contains AI keywords (e.g., browser opening chatgpt.com)
+		for _, kw := range aiKeywords {
+			if strings.Contains(cmdline, kw) {
+				detected = append(detected, ProcessInfo{
+					Name:       "[ProcScan] " + pid,
+					PID:        0,
+					Cmdline:    strings.TrimSpace(cmdline),
+					Category:   CategoryAIAgent,
+					DetectedAt: now,
+				})
+				break
+			}
+		}
+	}
+
+	return detected, nil
+}
+
 // inspectProcess extracts information from a single process.
 func (pm *ProcessMonitor) inspectProcess(ctx context.Context, p *process.Process) (ProcessInfo, error) {
 	name, err := p.NameWithContext(ctx)
@@ -341,10 +562,13 @@ func (pm *ProcessMonitor) classifyProcess(name, cmdline, exePath string) Process
 			return cat
 		}
 		// VULN-2 MITIGATION: If they renamed cursor.exe to notepad.exe, 
-		// the folder path (e.g. AppData\Local\Programs\cursor\notepad.exe) still reveals it.
-		// Exclude basic names like 'aide' from path matching to prevent false positives in C:\aide\...
-		if len(aiName) > 4 && strings.Contains(lowerExe, "\\"+aiName+"\\") {
-			return cat
+		// the folder path (e.g. AppData/Local/Programs/cursor/notepad.exe) still reveals it.
+		// Exclude basic names like 'aide' from path matching to prevent false positives.
+		// Use both \ (Windows) and / (Unix) path separators for cross-platform support.
+		if len(aiName) > 4 {
+			if strings.Contains(lowerExe, "\\"+aiName+"\\") || strings.Contains(lowerExe, "/"+aiName+"/") {
+				return cat
+			}
 		}
 	}
 

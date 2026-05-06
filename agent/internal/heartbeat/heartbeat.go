@@ -6,9 +6,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os/exec"
+	"runtime"
 	"sync"
 	"time"
-	"os/exec"
 
 	"github.com/lockon/voight-agent/internal/config"
 	"github.com/lockon/voight-agent/internal/integrity"
@@ -166,7 +167,8 @@ var (
 	isLockActive bool
 )
 
-// triggerScreenLockWarning uses PowerShell to deploy a full-screen warning window
+// triggerScreenLockWarning deploys a full-screen warning overlay.
+// Supports: Windows (PowerShell/WinForms), macOS (AppleScript), Linux (zenity/xdg-open).
 func triggerScreenLockWarning(serverAddr string) {
 	lockMu.Lock()
 	if isLockActive {
@@ -188,6 +190,20 @@ func triggerScreenLockWarning(serverAddr string) {
 		lockMu.Unlock()
 	}()
 
+	switch runtime.GOOS {
+	case "windows":
+		triggerScreenLockWindows(serverAddr)
+	case "darwin":
+		triggerScreenLockDarwin(serverAddr)
+	case "linux":
+		triggerScreenLockLinux(serverAddr)
+	default:
+		log.Printf("[WARNING PAYLOAD] Screen lock not supported on %s", runtime.GOOS)
+	}
+}
+
+// triggerScreenLockWindows uses PowerShell WinForms to deploy a full-screen warning window.
+func triggerScreenLockWindows(serverAddr string) {
 	script := fmt.Sprintf(`
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -348,10 +364,87 @@ $form.ShowDialog()
 		cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", script)
 		err := cmd.Run()
 		if err == nil {
-			// Exited cleanly (timer hit 0 and called Environment::Exit(0))
 			break
 		}
 		log.Printf("[WARNING PAYLOAD] Screen lock bypassed or terminated early. Relaunching... (Attempt %d/50)", attempts+1)
+		time.Sleep(1 * time.Second)
+	}
+}
+
+// triggerScreenLockDarwin uses AppleScript to deploy a persistent full-screen warning on macOS.
+// It creates a modal dialog that cannot be easily dismissed and plays a system alert sound.
+func triggerScreenLockDarwin(serverAddr string) {
+	// AppleScript to create a persistent alert dialog with a 30-second acknowledge countdown
+	script := `
+tell application "System Events"
+	set frontApp to name of first application process whose frontmost is true
+end tell
+
+-- Play alert sound
+do shell script "afplay /System/Library/Sounds/Sosumi.aiff &"
+
+-- Show persistent dialog
+tell application "System Events"
+	activate
+	set dialogResult to display dialog "⚠️ SYSTEM LOCKDOWN INITIATED ⚠️" & return & return & "UNAUTHORIZED AI OR PROHIBITED PROCESS DETECTED" & return & return & "REMAIN AT YOUR STATION AND AWAIT PROCTOR ASSISTANCE." & return & return & "This window will auto-dismiss in 30 seconds after acknowledgment." buttons {"ACKNOWLEDGE VIOLATION"} default button 1 with title "LOCKON VOIGHT — SECURITY WARNING" with icon caution giving up after 300
+end tell
+
+-- After acknowledgment, count down 30 seconds
+repeat with i from 30 to 1 by -1
+	do shell script "afplay /System/Library/Sounds/Tink.aiff &"
+	delay 1
+end repeat
+`
+
+	for attempts := 0; attempts < 50; attempts++ {
+		cmd := exec.Command("osascript", "-e", script)
+		err := cmd.Run()
+		if err == nil {
+			break
+		}
+		log.Printf("[WARNING PAYLOAD] macOS lock bypassed. Relaunching... (Attempt %d/50)", attempts+1)
+		time.Sleep(1 * time.Second)
+	}
+}
+
+// triggerScreenLockLinux uses zenity (GTK) or xdg-open + xdotool to deploy a warning on Linux.
+// Tries zenity first (available on most GNOME/GTK desktops), falls back to xmessage.
+func triggerScreenLockLinux(serverAddr string) {
+	for attempts := 0; attempts < 50; attempts++ {
+		// Try zenity first (most common on modern Linux desktops)
+		cmd := exec.Command("zenity",
+			"--warning",
+			"--title=LOCKON VOIGHT — SECURITY WARNING",
+			"--text=⚠️ SYSTEM LOCKDOWN INITIATED ⚠️\n\nUNAUTHORIZED AI OR PROHIBITED PROCESS DETECTED\n\nREMAIN AT YOUR STATION AND AWAIT PROCTOR ASSISTANCE.",
+			"--width=800",
+			"--height=600",
+			"--ok-label=ACKNOWLEDGE VIOLATION",
+			"--no-wrap",
+		)
+		err := cmd.Run()
+		if err == nil {
+			// Acknowledged — wait 30 seconds with beeps
+			for i := 30; i > 0; i-- {
+				exec.Command("paplay", "/usr/share/sounds/freedesktop/stereo/bell.oga").Run()
+				time.Sleep(1 * time.Second)
+			}
+			break
+		}
+
+		// Fallback to xmessage (X11 basic)
+		cmd = exec.Command("xmessage",
+			"-center",
+			"-buttons", "ACKNOWLEDGE VIOLATION:0",
+			"-default", "ACKNOWLEDGE VIOLATION",
+			"SYSTEM LOCKDOWN INITIATED\n\nUNAUTHORIZED AI OR PROHIBITED PROCESS DETECTED\n\nREMAIN AT YOUR STATION AND AWAIT PROCTOR ASSISTANCE.",
+		)
+		err = cmd.Run()
+		if err == nil {
+			time.Sleep(30 * time.Second)
+			break
+		}
+
+		log.Printf("[WARNING PAYLOAD] Linux lock failed. Retrying... (Attempt %d/50)", attempts+1)
 		time.Sleep(1 * time.Second)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -127,7 +128,7 @@ func (w *Watchdog) alertServer() {
 	}
 }
 
-// attemptRestart tries to restart the agent binary.
+// attemptRestart tries to restart the agent binary using OS-native mechanisms.
 func (w *Watchdog) attemptRestart() {
 	execPath, err := os.Executable()
 	if err != nil {
@@ -135,10 +136,104 @@ func (w *Watchdog) attemptRestart() {
 		return
 	}
 
-	// The watchdog binary is expected to be co-located with the agent binary
-	// Agent binary name convention: voight-sentinel (watchdog: voight-watchdog)
-	log.Printf("[Watchdog] Restart not implemented — manual intervention required.")
-	log.Printf("[Watchdog] Agent binary: %s", execPath)
+	switch runtime.GOOS {
+	case "darwin":
+		w.restartViaDarwin(execPath)
+	case "linux":
+		w.restartViaLinux(execPath)
+	case "windows":
+		w.restartViaWindows(execPath)
+	default:
+		log.Printf("[Watchdog] Restart not supported on %s — manual intervention required.", runtime.GOOS)
+	}
+}
+
+// restartViaDarwin installs a launchd plist and uses it to restart the agent on macOS.
+func (w *Watchdog) restartViaDarwin(execPath string) {
+	// Derive the agent binary path from the watchdog path
+	agentPath := strings.Replace(execPath, "voight-watchdog", "voight-sentinel-darwin", 1)
+	if _, err := os.Stat(agentPath); os.IsNotExist(err) {
+		agentPath = strings.Replace(execPath, "watchdog", "voight", 1) // fallback
+	}
+
+	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lockon.voight-sentinel</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>%s</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/voight-sentinel.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/voight-sentinel.err</string>
+</dict>
+</plist>`, agentPath)
+
+	plistPath := os.Getenv("HOME") + "/Library/LaunchAgents/com.lockon.voight-sentinel.plist"
+
+	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
+		log.Printf("[Watchdog] Failed to write launchd plist: %v", err)
+		// Fallback: direct exec
+		w.directRestart(agentPath)
+		return
+	}
+
+	// Unload (ignore error if not loaded) then load
+	exec.Command("launchctl", "unload", plistPath).Run()
+	if err := exec.Command("launchctl", "load", plistPath).Run(); err != nil {
+		log.Printf("[Watchdog] launchctl load failed: %v — trying direct restart", err)
+		w.directRestart(agentPath)
+		return
+	}
+
+	log.Printf("[Watchdog] Agent restarted via launchd: %s", plistPath)
+}
+
+// restartViaLinux uses systemd or direct exec to restart the agent on Linux.
+func (w *Watchdog) restartViaLinux(execPath string) {
+	agentPath := strings.Replace(execPath, "voight-watchdog", "voight-sentinel-linux", 1)
+	if _, err := os.Stat(agentPath); os.IsNotExist(err) {
+		agentPath = strings.Replace(execPath, "watchdog", "voight", 1)
+	}
+
+	// Try systemd restart first
+	if err := exec.Command("systemctl", "restart", "voight-sentinel").Run(); err == nil {
+		log.Println("[Watchdog] Agent restarted via systemd.")
+		return
+	}
+
+	// Fallback: direct exec
+	w.directRestart(agentPath)
+}
+
+// restartViaWindows uses a detached process to restart the agent on Windows.
+func (w *Watchdog) restartViaWindows(execPath string) {
+	agentPath := strings.Replace(execPath, "voight-watchdog.exe", "voight-sentinel.exe", 1)
+	if _, err := os.Stat(agentPath); os.IsNotExist(err) {
+		agentPath = strings.Replace(execPath, "watchdog", "voight", 1)
+	}
+	w.directRestart(agentPath)
+}
+
+// directRestart starts the agent binary as a detached child process.
+func (w *Watchdog) directRestart(agentPath string) {
+	cmd := exec.Command(agentPath)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Start(); err != nil {
+		log.Printf("[Watchdog] Failed to restart agent: %v", err)
+		return
+	}
+	log.Printf("[Watchdog] Agent restarted directly (PID: %d)", cmd.Process.Pid)
+	w.agentPID = cmd.Process.Pid
 }
 
 // ─── Watchdog Entry Point (for separate binary) ──────────────────

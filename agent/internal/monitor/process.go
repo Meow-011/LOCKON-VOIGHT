@@ -599,6 +599,32 @@ func (pm *ProcessMonitor) isCmdlineAI(cmdline string) bool {
 		}
 	}
 
+	// ── SSH Tunnel Evasion Detection ──
+	// Catches: ssh -L 11434:localhost:11434 remote-server
+	//          ssh -L 1234:0.0.0.0:1234 user@host
+	//          ssh -R ... (reverse tunnel)
+	if strings.Contains(cmdline, "ssh") && (strings.Contains(cmdline, "-L") || strings.Contains(cmdline, "-R")) {
+		// Check if any known AI port appears in the tunnel spec
+		for _, ap := range knownAIPorts {
+			portStr := fmt.Sprintf("%d", ap.Port)
+			if strings.Contains(cmdline, portStr) {
+				return true
+			}
+		}
+	}
+
+	// ── Reverse Proxy Evasion Detection ──
+	// Catches: socat TCP-LISTEN:11434,fork TCP:remote:11434
+	//          netsh interface portproxy ...
+	if strings.Contains(cmdline, "socat") || strings.Contains(cmdline, "portproxy") {
+		for _, ap := range knownAIPorts {
+			portStr := fmt.Sprintf("%d", ap.Port)
+			if strings.Contains(cmdline, portStr) {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 

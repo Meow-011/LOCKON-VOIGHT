@@ -329,7 +329,17 @@ func (nm *NetworkMonitor) classifyConnection(domain, ip string, port int) Networ
 		}
 	}
 
-	// Known AI service IP ranges could be added here in the future
+	// ── Private IP + Known AI Port Detection ──
+	// If the connection is to a private/internal IP on a known AI port,
+	// it likely means the contestant is running an AI runtime on another
+	// machine in the network, inside a VM, or via port forwarding.
+	if isPrivateIP(ip) {
+		for _, ap := range knownAIPorts {
+			if port == ap.Port {
+				return VerdictAIService
+			}
+		}
+	}
 
 	// HTTPS connections to unknown domains are flagged as UNKNOWN
 	if port == 443 && domain == "" {
@@ -337,6 +347,35 @@ func (nm *NetworkMonitor) classifyConnection(domain, ip string, port int) Networ
 	}
 
 	return VerdictSafe
+}
+
+// isPrivateIP checks if an IP address is in a private/reserved range.
+func isPrivateIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+
+	// RFC 1918 private ranges
+	privateRanges := []struct {
+		network string
+		mask    int
+	}{
+		{"10.0.0.0", 8},
+		{"172.16.0.0", 12},
+		{"192.168.0.0", 16},
+	}
+
+	for _, r := range privateRanges {
+		_, cidr, err := net.ParseCIDR(fmt.Sprintf("%s/%d", r.network, r.mask))
+		if err != nil {
+			continue
+		}
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // cleanupSeenConns removes entries older than 5 minutes.

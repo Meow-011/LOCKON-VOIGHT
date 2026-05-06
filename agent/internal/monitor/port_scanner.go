@@ -69,10 +69,14 @@ func NewPortScanner() *PortScanner {
 	}
 }
 
-// Scan probes all known AI ports on localhost and returns detected runtimes.
+// Scan probes all known AI ports on localhost AND detected VM NAT subnets,
+// then returns detected runtimes. This defeats running AI inside VMs with NAT.
 func (ps *PortScanner) Scan(ctx context.Context) []PortDetection {
 	var detected []PortDetection
 	now := time.Now()
+
+	// Build the list of target IPs: localhost + VM NAT gateways
+	targets := ps.getProbeTargets()
 
 	for _, ap := range knownAIPorts {
 		select {
@@ -81,24 +85,35 @@ func (ps *PortScanner) Scan(ctx context.Context) []PortDetection {
 		default:
 		}
 
-		if ps.isPortOpen(ap.Port) {
-			isAmbiguous := ambiguousPorts[ap.Port]
+		for _, target := range targets {
+			if ps.isPortOpenAt(target.IP, ap.Port) {
+				isAmbiguous := ambiguousPorts[ap.Port]
 
-			detection := PortDetection{
-				Port:       ap.Port,
-				Name:       ap.Name,
-				Category:   ap.Category,
-				DetectedAt: now,
-				Ambiguous:  isAmbiguous,
+			label := ap.Name
+				if target.Source != "localhost" {
+					label = fmt.Sprintf("%s [VM:%s]", ap.Name, target.Source)
+					// VM-based detections are never ambiguous — if an AI port
+					// is open on a VM NAT interface, it's intentional.
+					isAmbiguous = false
+				}
+
+				detection := PortDetection{
+					Port:       ap.Port,
+					Name:       label,
+					Category:   ap.Category,
+					DetectedAt: now,
+					Ambiguous:  isAmbiguous,
+				}
+
+				if isAmbiguous {
+					log.Printf("[PortScanner] Ambiguous port %d (%s) is open — requires corroboration", ap.Port, ap.Name)
+				} else {
+					log.Printf("[PortScanner] AI runtime detected: %s on %s:%d", label, target.IP, ap.Port)
+				}
+
+				detected = append(detected, detection)
+				break // Don't probe same port on multiple IPs if already found
 			}
-
-			if isAmbiguous {
-				log.Printf("[PortScanner] Ambiguous port %d (%s) is open — requires corroboration", ap.Port, ap.Name)
-			} else {
-				log.Printf("[PortScanner] AI runtime detected: %s on port %d", ap.Name, ap.Port)
-			}
-
-			detected = append(detected, detection)
 		}
 	}
 
@@ -109,15 +124,118 @@ func (ps *PortScanner) Scan(ctx context.Context) []PortDetection {
 	return detected
 }
 
-// isPortOpen checks if a TCP port is listening on localhost.
-func (ps *PortScanner) isPortOpen(port int) bool {
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
+// probeTarget represents an IP to probe with its source context.
+type probeTarget struct {
+	IP     string // e.g., "127.0.0.1", "192.168.152.1"
+	Source string // e.g., "localhost", "VMware", "VirtualBox"
+}
+
+// getProbeTargets returns localhost + any discovered VM NAT gateway IPs.
+// VM NAT gateways are typically at .1 or .2 of the VM's subnet.
+func (ps *PortScanner) getProbeTargets() []probeTarget {
+	targets := []probeTarget{
+		{IP: "127.0.0.1", Source: "localhost"},
+	}
+
+	// Enumerate all network interfaces to find VM-related adapters
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return targets
+	}
+
+	// Known VM adapter name patterns
+	vmPatterns := []struct {
+		Pattern string
+		Label   string
+	}{
+		{"vmnet", "VMware"},
+		{"vmware", "VMware"},
+		{"vboxnet", "VirtualBox"},
+		{"virtualbox", "VirtualBox"},
+		{"virbr", "KVM/libvirt"},
+		{"hyper-v", "Hyper-V"},
+		{"vethernet", "Hyper-V"},
+		{"docker", "Docker"},
+		{"br-", "Docker-Bridge"},
+	}
+
+	seen := make(map[string]bool)
+	seen["127.0.0.1"] = true
+
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue // skip down interfaces
+		}
+
+		lowerName := strings.ToLower(iface.Name)
+		vmLabel := ""
+		for _, vp := range vmPatterns {
+			if strings.Contains(lowerName, vp.Pattern) {
+				vmLabel = vp.Label
+				break
+			}
+		}
+		if vmLabel == "" {
+			continue // not a VM interface
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+
+			if ip == nil || ip.IsLoopback() || ip.To4() == nil {
+				continue
+			}
+
+			// The host's IP on the VM interface IS the gateway from the VM's perspective.
+			// e.g., host has 192.168.152.1 on vmnet8 -> VM sees this as its gateway.
+			hostIP := ip.String()
+			if !seen[hostIP] {
+				seen[hostIP] = true
+				targets = append(targets, probeTarget{IP: hostIP, Source: vmLabel})
+			}
+
+			// Also probe the .2 address (common for VMware DHCP/gateway)
+			ip4 := ip.To4()
+			gatewayIP := fmt.Sprintf("%d.%d.%d.2", ip4[0], ip4[1], ip4[2])
+			if !seen[gatewayIP] {
+				seen[gatewayIP] = true
+				targets = append(targets, probeTarget{IP: gatewayIP, Source: vmLabel})
+			}
+		}
+	}
+
+	if len(targets) > 1 {
+		log.Printf("[PortScanner] Probing %d targets: %v", len(targets), targets)
+	}
+
+	return targets
+}
+
+// isPortOpenAt checks if a TCP port is listening on a specific IP address.
+func (ps *PortScanner) isPortOpenAt(ip string, port int) bool {
+	addr := fmt.Sprintf("%s:%d", ip, port)
 	conn, err := net.DialTimeout("tcp", addr, ps.probeTimeout)
 	if err != nil {
 		return false
 	}
 	conn.Close()
 	return true
+}
+
+// isPortOpen checks if a TCP port is listening on localhost (backward compat).
+func (ps *PortScanner) isPortOpen(port int) bool {
+	return ps.isPortOpenAt("127.0.0.1", port)
 }
 
 // GetLastResults returns the most recent port scan results.
@@ -142,7 +260,7 @@ func (ps *PortScanner) ToProcessInfoList(detections []PortDetection) []ProcessIn
 		result = append(result, ProcessInfo{
 			Name:       fmt.Sprintf("[Port:%d] %s", d.Port, d.Name),
 			PID:        0, // Port scan cannot determine PID
-			Cmdline:    fmt.Sprintf("Listening on localhost:%d (behavioral detection)", d.Port),
+			Cmdline:    fmt.Sprintf("AI runtime '%s' detected on port %d (behavioral port scan)", d.Name, d.Port),
 			Category:   d.Category,
 			DetectedAt: d.DetectedAt,
 		})

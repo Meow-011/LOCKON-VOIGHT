@@ -110,22 +110,23 @@ LOCKON VOIGHT goes beyond simple string matching. It implements several advanced
 
 2. **Thwarting Process Renaming (Zero-Trust Signature & Path Extraction)**
    - *The Threat:* A contestant renames `cursor.exe` or `ollama.exe` to `notepad.exe` or `svchost.exe` to evade name-based process monitors.
-   - *The Mitigation:* VOIGHT employs two countermeasures:
+   - *The Mitigation:* VOIGHT employs three countermeasures:
      1. **Absolute Path Extraction:** Even if renamed, the directory structure (e.g., `AppData/Local/cursor/notepad.exe`) retains the tool's signature.
-     2. **Authenticode Digital Signatures (Windows):** The Agent reads the cryptographic digital signature embedded in the `.exe`. Even if the file is renamed or moved, the Authenticode certificate guarantees the publisher's identity (e.g., `Anysphere`, `Ollama`).
+     2. **Cryptographic Code Signing Verification:** On **Windows**, the Agent reads Authenticode certificates. On **macOS**, it verifies Apple Developer IDs via `codesign`. On **Linux**, it inspects ELF binary metadata, embedded build paths, and queries `dpkg`/`rpm` for package provenance.
+     3. **Behavioral Port Scanning:** AI runtimes inherently require opening a local server (e.g., port 11434 for Ollama, 1234 for LM Studio). VOIGHT continuously probes these known TCP ports on `localhost`.
 
 3. **Behavioral Port Scanning (Detecting Local Runtimes)**
    - *The Threat:* A contestant compiles a custom, unsigned binary of an open-source LLM runtime, rendering name, path, and signature checks ineffective.
-   - *The Mitigation:* AI runtimes inherently require opening a local server (e.g., port 11434 for Ollama, 1234 for LM Studio). VOIGHT continuously probes these known TCP ports on `localhost`. If a port is actively listening, it serves as an undeniable behavioral indicator of an AI server, regardless of the executable's camouflage.
+   - *The Mitigation:* AI runtimes inherently require opening a local server. VOIGHT continuously probes known TCP ports on `localhost`. If a port is actively listening, it serves as an undeniable behavioral indicator of an AI server, regardless of the executable's camouflage.
 
-3. **Subsystem & Virtualization Fallbacks (WSL2 / Docker)**
+4. **Subsystem & Virtualization Fallbacks (WSL2 / Docker)**
    - *The Threat:* Contestants run local LLMs inside Windows Subsystem for Linux (WSL2) or Docker to hide the internal Linux processes from the Windows Agent.
    - *The Mitigation:* VOIGHT automatically flags `wsl.exe`, `vmmemwsl`, and `docker.exe`. Even if the internal processes are obfuscated, any AI workload will trigger the **Resource Monitor** (detecting unnatural VRAM/GPU or RAM spikes mapped to the VM).
 
-4. **Dynamic Centralized Configurations & Policy Enforcement**
+5. **Dynamic Centralized Configurations & Policy Enforcement**
    - The Detection Policy (Blocked Domains, Processes, and File Extensions) as well as Core System Configurations (Agent Scan Intervals, Heartbeat Frequencies) are pushed dynamically from the Proctor Dashboard to all Agents via the REST API (with graceful fallback to gRPC Heartbeats if blocked), taking effect system-wide within 60 seconds without restarting the Agents.
 
-5. **False Positive Suppression & Passive Background Filtering**
+6. **False Positive Suppression & Passive Background Filtering**
    - *The Threat:* Over-aggressive process scanning flagging dormant VPN services (`tailscaled.exe`) or Windows 11 built-in Copilot background tasks, resulting in mass false-positive lockouts.
    - *The Mitigation:* VOIGHT separates active network telemetry from passive process execution. Built-in system AI tasks and standard CTF infrastructure tools (OpenVPN, WireGuard) are excluded from the hardcoded blocklist. Detection relies on active Window Focus and DNS resolutions.
 
@@ -197,7 +198,7 @@ Server requirements scale heavily based on the number of concurrent Agents conne
 
 ### Agent Capability Matrix (Cross-Platform)
 
-Due to deep structural differences in operating systems (and security sandboxing), some of VOIGHT's advanced telemetry and offensive features are currently optimized for Windows, with Linux and macOS parity actively in development.
+All VOIGHT telemetry and offensive features are fully supported across Windows, Linux, and macOS with full platform parity.
 
 | Feature / Telemetry | Windows | Linux | macOS | Notes |
 |---|:---:|:---:|:---:|---|
@@ -366,10 +367,10 @@ We welcome contributions to expand VOIGHT's detection capabilities:
 - [ ] **eBPF Integration (Linux):** Shift process and network monitoring to the kernel level using eBPF for zero-overhead, tamper-proof telemetry.
 - [ ] **Memory Forensics:** Deep RAM scanning to detect pre-loaded model weights (e.g., GGML/GGUF tensors) residing in memory without active execution.
 - [ ] **Offline Payload Execution:** Allow the Agent to trigger the Tactical Screen Lock autonomously if a network isolation attack is detected for more than 30 seconds.
-- [ ] **Linux DNS Cache Profiling:** Implement reliable DNS cache extraction on Linux via `systemd-resolved` / `nscd` / `dnsmasq` log parsing to achieve full parity with the Windows `Get-DnsClientCache` approach.
-- [ ] **Linux Screen Lock (X11/Wayland):** Port the Tactical Screen Lock payload to Linux desktops using GTK/Qt overlays with X11 and Wayland compositor support.
-- [ ] **macOS Complete Parity:** Expand the Darwin agent to achieve full feature parity - including DNS cache extraction, GPU monitoring via Metal Performance Shaders, native Screen Lock (Swift/AppKit), and robust `launchd`-based Watchdog protection.
-- [ ] **Agent GUI Interface:** Build a native graphical interface for the Sentinel Agent, providing contestants with a visible system tray / status panel showing connection health, enrollment status, and real-time heartbeat indicators - replacing the current headless CLI-only operation.
+- [ ] **Agent GUI Interface:** Build a native graphical interface for the Sentinel Agent, providing contestants with a visible system tray / status panel showing connection health, enrollment status, and real-time heartbeat indicators — replacing the current headless CLI-only operation.
+- [x] ~~**Linux DNS Cache Profiling:** DNS cache extraction on Linux via `journalctl` / `systemd-resolved` with fallback domain probing.~~
+- [x] ~~**Linux Screen Lock (X11/Wayland):** Tactical Screen Lock ported to Linux via `zenity` (GTK) with `xmessage` fallback.~~
+- [x] ~~**macOS Complete Parity:** Full feature parity achieved — DNS cache (mDNSResponder), GPU (ioreg/IOAccelerator), Screen Lock (AppleScript), Code Signing (`codesign`), and Watchdog (`launchd`).~~
 
 ## Frequently Asked Questions (FAQ)
 

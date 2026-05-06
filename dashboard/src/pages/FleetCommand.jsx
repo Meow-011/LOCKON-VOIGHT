@@ -11,7 +11,7 @@ import {
   Collapse, Tabs, Tab, TextField, keyframes, Grid, InputAdornment, MenuItem, Select, FormControl,
   Checkbox, TableSortLabel
 } from '@mui/material';
-import { Server, Terminal, Cpu, MemoryStick, Download, AlertOctagon, Send, ChevronDown, ChevronRight, Edit2, Trash2, Search, Filter, ShieldAlert, Activity, Wifi, Shield } from 'lucide-react';
+import { Server, Terminal, Cpu, MemoryStick, Download, AlertOctagon, Send, ChevronDown, ChevronRight, Edit2, Trash2, Search, Filter, ShieldAlert, Activity, Wifi, Shield, Pause, Play } from 'lucide-react';
 
 import toast from 'react-hot-toast';
 import { COLORS } from '../theme/theme';
@@ -260,6 +260,33 @@ export default function FleetCommandPage() {
     queryKey: ['fleet-incidents'],
     queryFn: () => incidentsAPI.list({ limit: 50 }).then(r => r.data),
     refetchInterval: 5000,
+  });
+
+  // Tactical Event Log Filters State
+  const [logFilters, setLogFilters] = useState({
+    paused: false,
+    minSev: 0,
+    hideScreenLocks: false,
+    search: ''
+  });
+  const [frozenIncidents, setFrozenIncidents] = useState([]);
+
+  React.useEffect(() => {
+    if (!logFilters.paused && recentIncidents) {
+      setFrozenIncidents(recentIncidents);
+    }
+  }, [recentIncidents, logFilters.paused]);
+
+  const filteredLogs = frozenIncidents.filter(inc => {
+    if (logFilters.minSev > 0 && (inc.weight || 0) < logFilters.minSev) return false;
+    if (logFilters.hideScreenLocks && inc.indicator_type === 'SCREEN_LOCK_ISSUED') return false;
+    if (logFilters.search) {
+      const q = logFilters.search.toLowerCase();
+      const target = (inc.target || inc.contestant_id || '').toLowerCase();
+      const type = (inc.indicator_type || '').toLowerCase();
+      if (!target.includes(q) && !type.includes(q)) return false;
+    }
+    return true;
   });
 
   const { data: competitionsData } = useQuery({
@@ -680,21 +707,78 @@ export default function FleetCommandPage() {
             <Typography variant="subtitle2" sx={{ fontFamily: 'monospace', fontWeight: 800, color: COLORS.accent, display: 'flex', alignItems: 'center', gap: 1 }}>
               <Activity size={16} /> TACTICAL EVENT LOG
             </Typography>
+            <Tooltip title={logFilters.paused ? "Resume Stream" : "Pause Stream"}>
+              <IconButton 
+                size="small" 
+                onClick={() => setLogFilters(p => ({...p, paused: !p.paused}))}
+                sx={{ 
+                  color: logFilters.paused ? COLORS.red : COLORS.textMuted,
+                  border: `1px solid ${logFilters.paused ? COLORS.red : 'transparent'}`,
+                  borderRadius: 0,
+                  p: 0.5
+                }}
+              >
+                {logFilters.paused ? <Play size={16} /> : <Pause size={16} />}
+              </IconButton>
+            </Tooltip>
           </Box>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+             <TextField 
+                size="small" 
+                placeholder="Filter Target or Event..." 
+                value={logFilters.search}
+                onChange={e => setLogFilters(p => ({...p, search: e.target.value}))}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><Search size={14} color={COLORS.textMuted}/></InputAdornment>,
+                  sx: { fontFamily: 'monospace', fontSize: '0.8rem', bgcolor: COLORS.bgDeep, borderRadius: 0, '& fieldset': { borderColor: COLORS.borderLight } }
+                }}
+             />
+             <Box sx={{ display: 'flex', gap: 1 }}>
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <Select 
+                     value={logFilters.minSev}
+                     onChange={e => setLogFilters(p => ({...p, minSev: e.target.value}))}
+                     displayEmpty
+                     sx={{ fontFamily: 'monospace', fontSize: '0.75rem', borderRadius: 0, bgcolor: COLORS.bgDeep, '& fieldset': { borderColor: COLORS.borderLight } }}
+                  >
+                     <MenuItem value={0} sx={{fontFamily: 'monospace', fontSize:'0.75rem'}}>ALL SEVERITIES</MenuItem>
+                     <MenuItem value={30} sx={{fontFamily: 'monospace', fontSize:'0.75rem', color: COLORS.yellow}}>WARNING+ (SEV-30+)</MenuItem>
+                     <MenuItem value={80} sx={{fontFamily: 'monospace', fontSize:'0.75rem', color: COLORS.red}}>CRITICAL (SEV-80+)</MenuItem>
+                  </Select>
+                </FormControl>
+                <Tooltip title={logFilters.hideScreenLocks ? "Show Screen Locks" : "Hide Screen Locks"}>
+                  <Button 
+                    variant={logFilters.hideScreenLocks ? "contained" : "outlined"}
+                    onClick={() => setLogFilters(p => ({...p, hideScreenLocks: !p.hideScreenLocks}))}
+                    sx={{ 
+                      minWidth: 0, p: 1, borderRadius: 0,
+                      bgcolor: logFilters.hideScreenLocks ? alpha(COLORS.accent, 0.2) : 'transparent',
+                      borderColor: logFilters.hideScreenLocks ? COLORS.accent : COLORS.borderLight, 
+                      color: logFilters.hideScreenLocks ? COLORS.accent : COLORS.textMuted,
+                      '&:hover': { bgcolor: alpha(COLORS.accent, 0.3) }
+                    }}
+                  >
+                    <Filter size={16} />
+                  </Button>
+                </Tooltip>
+             </Box>
+          </Box>
+
           <Paper sx={{ flex: 1, bgcolor: COLORS.bgDeep, border: `1px solid ${COLORS.border}`, borderRadius: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 400, maxHeight: { xs: 400, lg: 'none' } }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', flex: 1,
               '&::-webkit-scrollbar': { width: '4px' },
               '&::-webkit-scrollbar-track': { background: 'transparent' },
               '&::-webkit-scrollbar-thumb': { background: alpha(COLORS.accent, 0.3) }
             }}>
-              {(recentIncidents || []).length === 0 ? (
+              {filteredLogs.length === 0 ? (
                 <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, opacity: 0.5 }}>
                   <Activity size={32} color={COLORS.textMuted} />
                   <Typography variant="caption" sx={{ color: COLORS.textMuted, fontFamily: 'monospace', letterSpacing: '0.05em' }}>NO RECENT EVENTS</Typography>
                 </Box>
-              ) : (recentIncidents || []).map(inc => {
-                const isCrit = inc.weight >= 9;
-                const isWarn = inc.weight >= 5 && inc.weight < 9;
+              ) : filteredLogs.map(inc => {
+                const isCrit = inc.weight >= 80;
+                const isWarn = inc.weight >= 30 && inc.weight < 80;
                 const eColor = isCrit ? COLORS.red : isWarn ? COLORS.yellow : COLORS.borderLight;
                 const eBg = isCrit ? alpha(COLORS.red, 0.05) : isWarn ? alpha(COLORS.yellow, 0.05) : 'transparent';
                 

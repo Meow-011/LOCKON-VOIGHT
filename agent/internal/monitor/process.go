@@ -46,6 +46,8 @@ type ProcessMonitor struct {
 	lastSnapshot  []ProcessInfo
 	aiProcessMap  map[string]ProcessCategory
 	onDetection   func(ProcessInfo) // Callback when AI process is found
+	sigScanner    *SignatureScanner // Authenticode digital signature scanner
+	portScanner   *PortScanner      // AI runtime port scanner
 }
 
 // NewProcessMonitor creates a new process monitor.
@@ -53,6 +55,8 @@ func NewProcessMonitor(cfg *config.Config, onDetection func(ProcessInfo)) *Proce
 	pm := &ProcessMonitor{
 		cfg:         cfg,
 		onDetection: onDetection,
+		sigScanner:  NewSignatureScanner(),
+		portScanner: NewPortScanner(),
 	}
 	return pm
 }
@@ -151,11 +155,27 @@ func (pm *ProcessMonitor) Scan(ctx context.Context) ([]ProcessInfo, error) {
 	winProcs, err := pm.checkWindowTitles(ctx)
 	if err == nil && len(winProcs) > 0 {
 		for _, wp := range winProcs {
-			// Avoid duplicates if we already flagged the browser process
-			// But since we can't map PID easily, we just append it
 			snapshot = append(snapshot, wp)
 			detected = append(detected, wp)
 		}
+	}
+
+	// ── Port Scanning (Behavioral Detection) ──
+	// Probe known AI runtime ports on localhost
+	portDetections := pm.portScanner.Scan(ctx)
+
+	// Convert non-ambiguous port detections to ProcessInfo
+	portProcs := pm.portScanner.ToProcessInfoList(portDetections)
+	for _, pp := range portProcs {
+		snapshot = append(snapshot, pp)
+		detected = append(detected, pp)
+	}
+
+	// Corroborate ambiguous ports with process detections
+	corroborated := CorroborateAmbiguous(portDetections, detected)
+	for _, cp := range corroborated {
+		snapshot = append(snapshot, cp)
+		detected = append(detected, cp)
 	}
 
 	// Update last snapshot
@@ -234,13 +254,27 @@ func (pm *ProcessMonitor) checkWindowTitles(ctx context.Context) ([]ProcessInfo,
 		}
 
 		if isAI {
-			detected = append(detected, ProcessInfo{
-				Name:       p.Name + ".exe",
-				PID:        int32(p.Id),
-				Cmdline:    p.MainWindowTitle, // Store the Window Title in Cmdline for forensic evidence
-				Category:   CategoryAIAgent,   // Classify web chats as AI Agents
-				DetectedAt: now,
-			})
+			// VULN MITIGATION: Only flag if the process is a known web browser.
+			// Otherwise, opening a file named "chatgpt.txt" in notepad.exe will trigger a false positive.
+			lowerProcName := strings.ToLower(p.Name)
+			isBrowser := false
+			browsers := []string{"chrome", "msedge", "firefox", "brave", "opera", "vivaldi", "safari", "arc", "waterfox"}
+			for _, b := range browsers {
+				if strings.Contains(lowerProcName, b) {
+					isBrowser = true
+					break
+				}
+			}
+
+			if isBrowser {
+				detected = append(detected, ProcessInfo{
+					Name:       p.Name + ".exe",
+					PID:        int32(p.Id),
+					Cmdline:    p.MainWindowTitle, // Store the Window Title in Cmdline for forensic evidence
+					Category:   CategoryAIAgent,   // Classify web chats as AI Agents
+					DetectedAt: now,
+				})
+			}
 		}
 	}
 
@@ -267,6 +301,17 @@ func (pm *ProcessMonitor) inspectProcess(ctx context.Context, p *process.Process
 
 	category := pm.classifyProcess(name, cmdline, exePath)
 
+	// ── Signature Verification (Secondary Check) ──
+	// If name-based detection says NORMAL, do a deeper check
+	// via Authenticode digital signature to catch renamed executables.
+	if category == CategoryNormal && exePath != "" {
+		sigCategory := pm.sigScanner.CheckSignature(ctx, exePath)
+		if sigCategory != CategoryNormal {
+			log.Printf("[ProcessMonitor] Signature-based detection: %s (name: %s) -> %s", exePath, name, sigCategory)
+			category = sigCategory
+		}
+	}
+
 	return ProcessInfo{
 		Name:       name,
 		PID:        p.Pid,
@@ -290,7 +335,9 @@ func (pm *ProcessMonitor) classifyProcess(name, cmdline, exePath string) Process
 
 	// Check if process name or absolute path contains known AI tool names
 	for aiName, cat := range pm.aiProcessMap {
-		if strings.Contains(lowerName, aiName) {
+		// VULN MITIGATION: Only use strings.Contains for names longer than 4 chars
+		// Otherwise short acronyms like "lms" will match "films.exe"
+		if len(aiName) > 4 && strings.Contains(lowerName, aiName) {
 			return cat
 		}
 		// VULN-2 MITIGATION: If they renamed cursor.exe to notepad.exe, 
@@ -312,17 +359,14 @@ func (pm *ProcessMonitor) classifyProcess(name, cmdline, exePath string) Process
 
 // isCmdlineAI checks command line arguments for AI-related patterns.
 func (pm *ProcessMonitor) isCmdlineAI(cmdline string) bool {
-	// Python scripts running AI frameworks
+	// Python scripts running AI frameworks (using specific runtime patterns to avoid blocking standard script names)
 	aiPatterns := []string{
-		"transformers",
-		"langchain",
-		"autogen",
-		"openai",
-		"anthropic",
-		"ollama.serve",
+		"ollama serve",
+		"ollama run",
 		"vllm.entrypoints",
 		"text_generation_server",
 		"llama_cpp",
+		"koboldcpp",
 	}
 
 	for _, pattern := range aiPatterns {

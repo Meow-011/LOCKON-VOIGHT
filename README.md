@@ -108,9 +108,15 @@ LOCKON VOIGHT goes beyond simple string matching. It implements several advanced
    - *The Threat:* APIs like `api.openai.com` are hosted behind CDNs (Cloudflare, AWS). A standard Reverse DNS lookup on the outbound IP often returns the CDN's generic domain, blinding the monitor.
    - *The Mitigation:* The Agent polls the OS's internal DNS Cache (`Get-DnsClientCache`). When an outbound connection is made to a CDN IP, the Agent instantly correlates it with the exact domain the contestant just resolved, defeating IP masking without requiring invasive packet sniffers (like Wireshark/Npcap).
 
-2. **Thwarting Process Renaming (Absolute Path Extraction)**
-   - *The Threat:* A contestant renames `cursor.exe` to `notepad.exe` to evade process monitors.
-   - *The Mitigation:* VOIGHT extracts the **Absolute Executable Path** of every running process. Even if the executable is renamed, the directory structure (e.g., `AppData/Local/cursor/notepad.exe`) retains the tool's signature, triggering an immediate ESCALATE alert.
+2. **Thwarting Process Renaming (Zero-Trust Signature & Path Extraction)**
+   - *The Threat:* A contestant renames `cursor.exe` or `ollama.exe` to `notepad.exe` or `svchost.exe` to evade name-based process monitors.
+   - *The Mitigation:* VOIGHT employs two countermeasures:
+     1. **Absolute Path Extraction:** Even if renamed, the directory structure (e.g., `AppData/Local/cursor/notepad.exe`) retains the tool's signature.
+     2. **Authenticode Digital Signatures (Windows):** The Agent reads the cryptographic digital signature embedded in the `.exe`. Even if the file is renamed or moved, the Authenticode certificate guarantees the publisher's identity (e.g., `Anysphere`, `Ollama`).
+
+3. **Behavioral Port Scanning (Detecting Local Runtimes)**
+   - *The Threat:* A contestant compiles a custom, unsigned binary of an open-source LLM runtime, rendering name, path, and signature checks ineffective.
+   - *The Mitigation:* AI runtimes inherently require opening a local server (e.g., port 11434 for Ollama, 1234 for LM Studio). VOIGHT continuously probes these known TCP ports on `localhost`. If a port is actively listening, it serves as an undeniable behavioral indicator of an AI server, regardless of the executable's camouflage.
 
 3. **Subsystem & Virtualization Fallbacks (WSL2 / Docker)**
    - *The Threat:* Contestants run local LLMs inside Windows Subsystem for Linux (WSL2) or Docker to hide the internal Linux processes from the Windows Agent.
@@ -134,7 +140,8 @@ LOCKON VOIGHT goes beyond simple string matching. It implements several advanced
 LOCKON VOIGHT is designed with ethical hacking and participant privacy in mind. While the Agent monitors system activity to ensure competition integrity, it strictly limits its scope.
 
 **What VOIGHT Collects:**
-- Process names, absolute paths, and active window titles.
+- Process names, absolute paths, active window titles, and cryptographic Digital Signatures (Authenticode).
+- Local TCP listening ports for behavioral detection of local servers.
 - Outbound DNS resolutions (domain names and IPs) to known AI infrastructure.
 - System resource utilization (CPU, RAM, VRAM, and GPU Load percentages).
 - System hardware fingerprints (MAC Address, CPU UUID) for Agent registration.

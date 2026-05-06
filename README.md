@@ -113,19 +113,19 @@ LOCKON VOIGHT goes beyond simple string matching. It implements several advanced
    - *The Mitigation:* VOIGHT employs three countermeasures:
      1. **Absolute Path Extraction:** Even if renamed, the directory structure (e.g., `AppData/Local/cursor/notepad.exe`) retains the tool's signature.
      2. **Cryptographic Code Signing Verification:** On **Windows**, the Agent reads Authenticode certificates. On **macOS**, it verifies Apple Developer IDs via `codesign`. On **Linux**, it inspects ELF binary metadata, embedded build paths, and queries `dpkg`/`rpm` for package provenance.
-     3. **Behavioral Port Scanning:** AI runtimes inherently require opening a local server (e.g., port 11434 for Ollama, 1234 for LM Studio). VOIGHT continuously probes these known TCP ports on `localhost`.
+     3. **Behavioral Port Scanning:** AI runtimes inherently require opening a local server (e.g., port 11434 for Ollama, 1234 for LM Studio). VOIGHT continuously probes these known TCP ports on `localhost` and virtualized subnets.
 
 3. **Behavioral Port Scanning (Detecting Local & Virtualized Runtimes)**
-   - *The Threat:* A contestant compiles a custom, unsigned binary of an open-source LLM runtime, rendering name, path, and signature checks ineffective. Or they run AI inside a VM with NAT networking to hide the process from the host.
-   - *The Mitigation:* VOIGHT probes known AI TCP ports (e.g., 11434, 1234, 5001) on **localhost AND dynamically-discovered VM NAT subnets**. The Agent auto-detects VMware (`vmnet`), VirtualBox (`vboxnet`), KVM (`virbr`), Hyper-V (`vethernet`), and Docker bridge interfaces, then probes AI ports on their gateway IPs. VM-based detections are always flagged as intentional.
+   - *The Threat:* A contestant compiles a custom, unsigned binary of an open-source LLM runtime, rendering name, path, and signature checks ineffective. Or they run AI as a background service inside a VM with NAT networking to hide the process from the host.
+   - *The Mitigation:* VOIGHT probes known AI TCP ports (e.g., 11434, 1234, 5001) on **localhost AND dynamically-discovered VM NAT subnets**. The Agent auto-detects VM interfaces (VMware, VirtualBox, KVM, Hyper-V, Docker) and reads the OS **ARP table** to discover actual live guest IPs. It then probes these hidden IPs, completely bypassing VM isolation. VM-based detections are always flagged as intentional.
 
 4. **Subsystem & Virtualization Fallbacks (WSL2 / Docker / VM NAT)**
    - *The Threat:* Contestants run local LLMs inside Windows Subsystem for Linux (WSL2), Docker, or a full VM (VMware/VirtualBox) to hide the internal processes from the host Agent.
    - *The Mitigation:* VOIGHT automatically flags `wsl.exe`, `vmmemwsl`, and `docker.exe`. Additionally, the **Network Monitor** detects any outbound connection to a private IP (`10.x.x.x`, `172.16.x.x`, `192.168.x.x`) on a known AI port (e.g., `:11434`) and flags it as `AI_SERVICE`, catching cross-machine or VM-to-host AI usage.
 
-5. **SSH Tunnel & Reverse Proxy Evasion Detection**
-   - *The Threat:* A contestant uses `ssh -L 11434:localhost:11434 remote-server` to tunnel a remote Ollama instance through SSH, or uses `socat` / `netsh portproxy` to forward AI ports from another machine.
-   - *The Mitigation:* VOIGHT scans the command-line arguments (`cmdline`) of every running process. If `ssh` with `-L`/`-R` flags is detected alongside a known AI port number, or if `socat`/`portproxy` references an AI port, the process is immediately flagged as an AI evasion attempt.
+5. **Tunneling & Reverse Proxy Evasion Detection**
+   - *The Threat:* A contestant uses `ssh -L 11434:localhost:11434 remote-server` to tunnel a remote Ollama instance, or uses `socat`, `frp`, `chisel`, `ngrok`, or `netsh portproxy` to forward AI ports from another machine.
+   - *The Mitigation:* VOIGHT scans the command-line arguments (`cmdline`) of every running process. If `ssh` with `-L`/`-R` flags is detected alongside a known AI port number, or if tunneling tools like `socat`/`portproxy` reference an AI port, the process is immediately flagged as an evasion attempt. Common tunneling utilities (`chisel`, `frp`, `ngrok`, `cloudflared`) are also strictly monitored as Evasion tools.
 
 6. **Dynamic Centralized Configurations & Policy Enforcement**
    - The Detection Policy (Blocked Domains, Processes, and File Extensions) as well as Core System Configurations (Agent Scan Intervals, Heartbeat Frequencies) are pushed dynamically from the Proctor Dashboard to all Agents via the REST API (with graceful fallback to gRPC Heartbeats if blocked), taking effect system-wide within 60 seconds without restarting the Agents.

@@ -101,6 +101,7 @@ In the cyberpunk classic _Blade Runner_, the Voight-Kampff (V-K) machine is an a
 | VRAM Spike (configurable, default >4GB) | 60     | nvidia-smi monitoring                           |
 | GPU Spike (configurable, default >80%)  | 50     | nvidia-smi monitoring                           |
 | Virtualization (WSL2/Docker)            | 40     | Process detection (`vmmem`, `wsl.exe`)          |
+| eBPF Memory Forensics (Linux ONLY)      | 100    | Kernel-level memory/process unmasking           |
 
 ### Advanced Anti-Cheat Mechanisms
 
@@ -135,6 +136,10 @@ LOCKON VOIGHT goes beyond simple string matching. It implements several advanced
 7. **False Positive Suppression & Passive Background Filtering**
    - _The Threat:_ Over-aggressive process scanning flagging dormant VPN services (`tailscaled.exe`) or Windows 11 built-in Copilot background tasks, resulting in mass false-positive lockouts.
    - _The Mitigation:_ VOIGHT separates active network telemetry from passive process execution. Built-in system AI tasks and standard CTF infrastructure tools (OpenVPN, WireGuard) are excluded from the hardcoded blocklist. Detection relies on active Window Focus and DNS resolutions.
+
+8. **eBPF Kernel-Level Memory Forensics (Linux)**
+   - _The Threat:_ Advanced contestants using Ring-0 rootkits or kernel modules to hide AI processes (like Ollama or Python LLM scripts) from the user-space process list.
+   - _The Mitigation:_ On Linux systems, VOIGHT automatically loads an **eBPF (Extended Berkeley Packet Filter)** program into the kernel space. This program hooks directly into system calls and kernel-level memory allocations, bypassing any user-space API tampering. If a hidden process attempts to allocate memory characteristic of LLM tensor operations, the eBPF module immediately flags the anomaly directly to the Agent.
 
 </br>
 

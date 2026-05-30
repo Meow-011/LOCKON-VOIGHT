@@ -233,6 +233,8 @@ _(Legend: 🟢 Fully Supported & Tested \| 🟡 Partial/WIP \| ❌ Planned for F
   <img src="images/Agent-preview.png" alt="Agent Desktop GUI Preview" width="800" />
 </div>
 
+<br/>
+
 ### Firewall Rules (Security Groups)
 
 If deploying the Proctor Server to a cloud environment (e.g., AWS EC2, DigitalOcean), ensure your Cloud Firewall strictly follows these rules:

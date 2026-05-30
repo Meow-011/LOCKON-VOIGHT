@@ -21,9 +21,9 @@ const COLORS = {
 };
 
 const PLATFORMS = [
-  { key: 'windows', label: 'Windows', icon: '/Icons/Windows.svg', file: 'voight-sentinel-windows-bundle.zip', size: '12.4 MB', color: '#3b82f6' },
-  { key: 'linux', label: 'Linux', icon: '/Icons/Linux.svg', file: 'voight-sentinel-linux-bundle.zip', size: '11.8 MB', color: '#f97316' },
-  { key: 'macos', label: 'macOS', icon: '/Icons/Apple.svg', file: 'voight-sentinel-macos-bundle.zip', size: '12.1 MB', color: '#d946ef' },
+  { key: 'windows', label: 'Windows', icon: '/Icons/Windows.svg', file: 'voight-sentinel-windows-bundle.zip', size: '~14 MB', color: '#3b82f6' },
+  { key: 'linux', label: 'Linux', icon: '/Icons/Linux.svg', file: 'voight-sentinel-linux-bundle.zip', size: '~5 MB', color: '#f97316' },
+  { key: 'macos', label: 'macOS', icon: '/Icons/Apple.svg', file: 'voight-sentinel-darwin-bundle.zip', size: '~5 MB', color: '#d946ef' },
 ];
 
 

@@ -60,22 +60,10 @@ func NewNetworkMonitor(cfg *config.Config, onDetection func(NetworkEvent)) *Netw
 }
 
 // buildDomainMap creates a lookup set of AI domains.
+// The domain list is seeded from shared/detection_rules.json via the Config struct,
+// with hardcoded defaults as fallback. Additional domains can be set via config JSON.
 func buildDomainMap(cfg *config.Config) map[string]bool {
 	m := make(map[string]bool)
-
-	defaultDomains := []string{
-		"api.openai.com", "chat.openai.com", "chatgpt.com", "openai.com",
-		"api.anthropic.com", "claude.ai",
-		"generativelanguage.googleapis.com", "gemini.google.com",
-		"api.deepseek.com", "chat.deepseek.com",
-		"api.mistral.ai", "api.cohere.ai",
-		"api.perplexity.ai", "api.groq.com",
-		"api.together.xyz", "api-inference.huggingface.co",
-	}
-
-	for _, domain := range defaultDomains {
-		m[strings.ToLower(domain)] = true
-	}
 
 	for _, domain := range cfg.AIDomains {
 		m[strings.ToLower(domain)] = true
@@ -380,6 +368,8 @@ func isPrivateIP(ipStr string) bool {
 
 // cleanupSeenConns removes entries older than 5 minutes.
 func (nm *NetworkMonitor) cleanupSeenConns(now time.Time) {
+	nm.mu.Lock()
+	defer nm.mu.Unlock()
 	for key, lastSeen := range nm.seenConns {
 		if now.Sub(lastSeen) > 5*time.Minute {
 			delete(nm.seenConns, key)

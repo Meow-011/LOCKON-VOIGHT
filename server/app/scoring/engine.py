@@ -6,8 +6,12 @@ Implements the weighted scoring algorithm with time-based decay.
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
 import json
+import os
+import logging
 
 from app.core.config import settings
+
+_logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────
@@ -77,30 +81,77 @@ IOA_WEIGHTS: Dict[str, Dict] = {
     "HEARTBEAT_TIMEOUT": {
         "weight": 95,
         "severity": "CRITICAL",
-        "description": "Agent heartbeat missed for 30+ seconds",
+        "description": "Agent heartbeat missed for > 60 seconds (Possible tampering/offline)",
+    },
+    "INTENTIONAL_DISCONNECT": {
+        "weight": 95,
+        "severity": "CRITICAL",
+        "description": "Contestant intentionally disconnected the agent via GUI",
+    },
+    "EBPF_EXEC_AI": {
+        "weight": 85,
+        "severity": "HIGH",
+        "description": "eBPF Kernel Trace: Execution of known AI process",
     },
     "BINARY_TAMPER": {
         "weight": 100,
         "severity": "CRITICAL",
         "description": "Agent binary hash mismatch — tamper detected",
     },
+    # Memory Forensics (Linux)
+    "MEMORY_MODEL_LOADED": {
+        "weight": 95,
+        "severity": "CRITICAL",
+        "description": "AI model tensor detected in process memory (GGUF/GGML/SafeTensors)",
+    },
+    # eBPF Kernel Events (Linux)
+    "EBPF_EXEC_AI": {
+        "weight": 85,
+        "severity": "HIGH",
+        "description": "AI tool execution detected via kernel eBPF tracepoint",
+    },
+    "EBPF_FILE_MODEL_ACCESS": {
+        "weight": 75,
+        "severity": "HIGH",
+        "description": "AI model file opened/read detected via kernel eBPF tracepoint",
+    },
 }
 
+
+# ─── Load shared detection rules (single source of truth) ─────────────
+_SHARED_RULES_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "shared", "detection_rules.json"
+)
+
+def _load_shared_rules() -> dict:
+    """Load shared detection rules from JSON. Falls back to hardcoded defaults."""
+    try:
+        with open(_SHARED_RULES_PATH, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        _logger.warning(f"Could not load shared detection rules: {e}. Using hardcoded defaults.")
+        return {}
+
+_shared = _load_shared_rules()
 
 # Critical AI domain mapping for network scoring
-CRITICAL_AI_DOMAINS = {
-    "api.openai.com", "chat.openai.com", "chatgpt.com", "openai.com",
-    "api.anthropic.com", "claude.ai",
-}
+CRITICAL_AI_DOMAINS = set(
+    _shared.get("ai_domains", {}).get("critical", [
+        "api.openai.com", "chat.openai.com", "chatgpt.com", "openai.com",
+        "api.anthropic.com", "claude.ai",
+    ])
+)
 
-HIGH_AI_DOMAINS = {
-    "generativelanguage.googleapis.com", "gemini.google.com",
-    "api.deepseek.com", "chat.deepseek.com",
-    "api.mistral.ai", "api.cohere.ai",
-    "api.perplexity.ai", "api.groq.com",
-    "api.together.xyz", "api-inference.huggingface.co",
-    "copilot-proxy.githubusercontent.com", "api.githubcopilot.com",
-}
+HIGH_AI_DOMAINS = set(
+    _shared.get("ai_domains", {}).get("high", [
+        "generativelanguage.googleapis.com", "gemini.google.com",
+        "api.deepseek.com", "chat.deepseek.com",
+        "api.mistral.ai", "api.cohere.ai",
+        "api.perplexity.ai", "api.groq.com",
+        "api.together.xyz", "api-inference.huggingface.co",
+        "copilot-proxy.githubusercontent.com", "api.githubcopilot.com",
+    ])
+)
 
 
 class ScoringEngine:
@@ -111,17 +162,17 @@ class ScoringEngine:
         Raw Score = Σ (indicator_weight × decay_factor)
         Final Score = min(Raw Score, 100)
 
-    Decay factors:
-        - Within 5 min:  1.0
-        - 5-15 min:      0.7
-        - 15-30 min:     0.4
-        - >30 min:       0.1
+    Decay factors (thresholds configurable via SCORE_DECAY_*_MINUTES):
+        - Within RECENT min (default 1):   1.0  (full weight)
+        - RECENT..MEDIUM min (default 2):  0.7
+        - MEDIUM..OLD min (default 3):     0.4
+        - Beyond OLD min:                  0.1  (residual)
     """
 
     def __init__(self):
-        self.decay_recent = settings.SCORE_DECAY_RECENT_MINUTES  # 5
-        self.decay_medium = settings.SCORE_DECAY_MEDIUM_MINUTES  # 15
-        self.decay_old = settings.SCORE_DECAY_OLD_MINUTES        # 30
+        self.decay_recent = settings.SCORE_DECAY_RECENT_MINUTES
+        self.decay_medium = settings.SCORE_DECAY_MEDIUM_MINUTES
+        self.decay_old = settings.SCORE_DECAY_OLD_MINUTES
         self.threshold_green = settings.SCORE_THRESHOLD_GREEN    # 30
         self.threshold_yellow = settings.SCORE_THRESHOLD_YELLOW  # 70
         

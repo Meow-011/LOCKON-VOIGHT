@@ -7,21 +7,33 @@ New-Item -ItemType Directory -Force -Path bundle\linux | Out-Null
 New-Item -ItemType Directory -Force -Path bundle\macos | Out-Null
 New-Item -ItemType Directory -Force -Path "../dashboard/public/downloads" | Out-Null
 
-$configTemplate = @'
+# Read competition key from server settings if available
+$competitionKey = "GLOBAL_COMP_KEY_12345"
+if (Test-Path "../server/settings.json") {
+    $settings = Get-Content "../server/settings.json" | ConvertFrom-Json
+    if ($settings.competitionKey) {
+        $competitionKey = $settings.competitionKey
+    }
+}
+
+$configTemplate = @"
 {
   "server_address": "localhost",
   "grpc_port": 50052,
   "team_name": "YOUR_TEAM_NAME_HERE",
   "contestant_name": "YOUR_ALIAS_HERE",
-  "competition_key": "GLOBAL_COMP_KEY_12345",
+  "competition_key": "$competitionKey",
   "use_tls": false
 }
-'@
+"@
 
 # 1. Build Windows
-Write-Host "Building for Windows..." -ForegroundColor Yellow
+Write-Host "Building for Windows (with CGO)..." -ForegroundColor Yellow
 $env:GOOS="windows"
 $env:GOARCH="amd64"
+$env:CGO_ENABLED="1"
+$env:CC="gcc"
+$env:PATH = "C:\Users\natth\OneDrive\Desktop\MyProject\LOCKON-VOIGHT\gcc_out\mingw64\bin;" + $env:PATH
 go build -ldflags="-s -w" -o bin/voight-sentinel.exe ./cmd/voight
 
 # Create Windows Bundle
@@ -33,34 +45,47 @@ if (Test-Path "../dashboard/public/downloads/voight-sentinel-windows-bundle.zip"
 }
 Compress-Archive -Path "bundle\windows\*" -DestinationPath "../dashboard/public/downloads/voight-sentinel-windows-bundle.zip"
 
-# 2. Build Linux
-Write-Host "Building for Linux..." -ForegroundColor Yellow
-$env:GOOS="linux"
-$env:GOARCH="amd64"
-go build -ldflags="-s -w" -o bin/voight-sentinel-linux ./cmd/voight
-
-# Create Linux Bundle
-Copy-Item "bin/voight-sentinel-linux" "bundle\linux\"
-Set-Content "bundle\linux\README.txt" "LOCKON VOIGHT Sentinel - Linux`n`n1. Extract all files to a folder.`n2. Open config.json and set your team_name.`n3. Run 'chmod +x voight-sentinel-linux'.`n4. Run 'sudo ./voight-sentinel-linux'."
-Set-Content "bundle\linux\config.json" $configTemplate
-if (Test-Path "../dashboard/public/downloads/voight-sentinel-linux-bundle.zip") {
-    Remove-Item "../dashboard/public/downloads/voight-sentinel-linux-bundle.zip" -Force
+# 2. Build Linux & macOS using fyne-cross
+Write-Host "Checking for fyne-cross tool..." -ForegroundColor Yellow
+$env:PATH = "$env:USERPROFILE\go\bin;" + $env:PATH
+if (-not (Get-Command "fyne-cross" -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing fyne-cross..." -ForegroundColor Yellow
+    go install github.com/fyne-io/fyne-cross@latest
 }
-Compress-Archive -Path "bundle\linux\*" -DestinationPath "../dashboard/public/downloads/voight-sentinel-linux-bundle.zip"
 
-# 3. Build macOS
-Write-Host "Building for macOS..." -ForegroundColor Yellow
-$env:GOOS="darwin"
-$env:GOARCH="arm64"
-go build -ldflags="-s -w" -o bin/voight-sentinel-darwin ./cmd/voight
+Write-Host "Building for Linux (via Docker/fyne-cross)..." -ForegroundColor Yellow
+fyne-cross linux -arch=amd64 -name=voight-sentinel -dir=./cmd/voight
 
-# Create macOS Bundle
-Copy-Item "bin/voight-sentinel-darwin" "bundle\macos\"
-Set-Content "bundle\macos\README.txt" "LOCKON VOIGHT Sentinel - macOS`n`n1. Extract all files to a folder.`n2. Open config.json and set your team_name.`n3. Run 'chmod +x voight-sentinel-darwin'.`n4. Run 'sudo ./voight-sentinel-darwin'."
-Set-Content "bundle\macos\config.json" $configTemplate
-if (Test-Path "../dashboard/public/downloads/voight-sentinel-macos-bundle.zip") {
-    Remove-Item "../dashboard/public/downloads/voight-sentinel-macos-bundle.zip" -Force
+if (Test-Path "fyne-cross\bin\linux-amd64\voight") {
+    Copy-Item "fyne-cross\bin\linux-amd64\voight" "bundle\linux\voight-sentinel"
+    Set-Content "bundle\linux\README.txt" "LOCKON VOIGHT Sentinel - Linux`n`n1. Extract all files to a folder.`n2. Open config.json and set your team_name.`n3. Run ./voight-sentinel with sudo/root privileges."
+    Set-Content "bundle\linux\config.json" $configTemplate
+    if (Test-Path "../dashboard/public/downloads/voight-sentinel-linux-bundle.zip") {
+        Remove-Item "../dashboard/public/downloads/voight-sentinel-linux-bundle.zip" -Force
+    }
+    Compress-Archive -Path "bundle\linux\*" -DestinationPath "../dashboard/public/downloads/voight-sentinel-linux-bundle.zip"
 }
-Compress-Archive -Path "bundle\macos\*" -DestinationPath "../dashboard/public/downloads/voight-sentinel-macos-bundle.zip"
+
+Write-Host "Building for macOS (via Docker/fyne-cross)..." -ForegroundColor Yellow
+fyne-cross darwin -arch=amd64 -name=voight-sentinel-darwin -app-id=com.lockon.voight -dir=./cmd/voight
+
+if (Test-Path "fyne-cross\bin\darwin-amd64\voight") {
+    Copy-Item "fyne-cross\bin\darwin-amd64\voight" "bundle\macos\voight-sentinel-darwin"
+    Set-Content "bundle\macos\README.txt" "LOCKON VOIGHT Sentinel - macOS`n`n1. Extract all files to a folder.`n2. Open config.json and set your team_name.`n3. Run ./voight-sentinel-darwin with sudo/root privileges."
+    Set-Content "bundle\macos\config.json" $configTemplate
+    if (Test-Path "../dashboard/public/downloads/voight-sentinel-darwin-bundle.zip") {
+        Remove-Item "../dashboard/public/downloads/voight-sentinel-darwin-bundle.zip" -Force
+    }
+    Compress-Archive -Path "bundle\macos\*" -DestinationPath "../dashboard/public/downloads/voight-sentinel-darwin-bundle.zip"
+} else {
+    Write-Host "macOS binary not generated (macOS SDK likely missing). Creating placeholder bundle..." -ForegroundColor Yellow
+    Set-Content "bundle\macos\voight-sentinel-darwin.sh" "#!/bin/bash`necho 'Error: macOS binary could not be cross-compiled from this host due to missing Apple SDK.'`necho 'Please build the agent natively on a Mac using: go build -o voight-sentinel-darwin ./cmd/voight'`n"
+    Set-Content "bundle\macos\README.txt" "LOCKON VOIGHT Sentinel - macOS`n`nDue to Apple SDK licensing, this agent must be compiled natively on a macOS machine.`nPlease clone the repository on a Mac and run 'go build' inside the 'agent' directory."
+    Set-Content "bundle\macos\config.json" $configTemplate
+    if (Test-Path "../dashboard/public/downloads/voight-sentinel-darwin-bundle.zip") {
+        Remove-Item "../dashboard/public/downloads/voight-sentinel-darwin-bundle.zip" -Force
+    }
+    Compress-Archive -Path "bundle\macos\*" -DestinationPath "../dashboard/public/downloads/voight-sentinel-darwin-bundle.zip"
+}
 
 cd ..

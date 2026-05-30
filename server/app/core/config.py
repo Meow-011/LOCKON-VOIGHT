@@ -37,16 +37,26 @@ class Settings(BaseSettings):
     GRPC_PORT: int = 50052
     GRPC_MAX_WORKERS: int = 10
 
+    # gRPC TLS (mTLS)
+    GRPC_TLS_ENABLED: bool = False
+    GRPC_CA_CERT_PATH: str = "deploy/certs/generated/ca-cert.pem"
+    GRPC_SERVER_CERT_PATH: str = "deploy/certs/generated/server-cert.pem"
+    GRPC_SERVER_KEY_PATH: str = "deploy/certs/generated/server-key.pem"
+
     # Agent
     AGENT_HEARTBEAT_INTERVAL_SECONDS: int = 10
     AGENT_HEARTBEAT_TIMEOUT_SECONDS: int = 30
 
+    # Resource anomaly thresholds
+    RESOURCE_GPU_SPIKE_THRESHOLD: float = 80.0     # GPU % above this → GPU_SPIKE incident
+    RESOURCE_VRAM_SPIKE_THRESHOLD_MB: float = 4096  # VRAM MB above this → VRAM_SPIKE incident
+
     # Scoring
-    SCORE_THRESHOLD_GREEN: int = 30
-    SCORE_THRESHOLD_YELLOW: int = 70
-    SCORE_DECAY_RECENT_MINUTES: int = 1
-    SCORE_DECAY_MEDIUM_MINUTES: int = 2
-    SCORE_DECAY_OLD_MINUTES: int = 3
+    SCORE_THRESHOLD_GREEN: int = 30   # Score < GREEN → GREEN level
+    SCORE_THRESHOLD_YELLOW: int = 70  # Score < YELLOW → YELLOW level, else RED
+    SCORE_DECAY_RECENT_MINUTES: int = 1  # Full weight (×1.0) within this window
+    SCORE_DECAY_MEDIUM_MINUTES: int = 2  # Reduced weight (×0.7) within this window
+    SCORE_DECAY_OLD_MINUTES: int = 3     # Further reduced (×0.4), beyond → ×0.1
 
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
@@ -78,3 +88,9 @@ if settings.JWT_SECRET_KEY == "voight-dev-secret-change-in-production":
             "⚠️  JWT_SECRET_KEY is using the default dev value. "
             "Change this before deploying to production!"
         )
+
+if settings.ENVIRONMENT == "production" and not settings.GRPC_TLS_ENABLED:
+    _logger.warning(
+        "⚠️  gRPC is running WITHOUT TLS in production! "
+        "Set GRPC_TLS_ENABLED=true and provide certificate paths."
+    )

@@ -19,6 +19,12 @@ service TelemetryService {
 
   // Send a single heartbeat
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
+  // Contestant explicitly requests help from the Proctor
+  rpc RequestHelp(HelpRequest) returns (HelpResponse);
+
+  // Contestant intentionally disconnects the agent (Graceful Exit)
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
 }
 
 // ─────────────────────────────────────────────
@@ -36,6 +42,8 @@ message TelemetryReport {
     NetworkEvent network_event = 11;
     ResourceSnapshot resource_snapshot = 12;
     FileAlert file_alert = 13;
+    EbpfAlert ebpf_alert = 14;
+    MemoryFinding memory_finding = 15;
   }
 }
 
@@ -112,4 +120,47 @@ message AgentConfig {
   int32 resource_scan_interval_seconds = 3;
   repeated string additional_ai_domains = 4;     // Extra domains to watch
   repeated string additional_ai_processes = 5;   // Extra process names to flag
+}
+
+// ─── eBPF Kernel Events ─────────────────────
+
+message EbpfAlert {
+  string event_type = 1;     // "EXEC", "CONNECT", "FILE_OPEN"
+  int32 pid = 2;
+  string process_name = 3;
+  string detail = 4;         // Binary path, IP:port, or filename
+  string category = 5;       // Classification: "AI_EDITOR", "LOCAL_LLM", "AI_AGENT", "MODEL_FILE"
+}
+
+// ─── Memory Forensics ───────────────────────
+
+message MemoryFinding {
+  int32 pid = 1;
+  string process_name = 2;
+  string model_format = 3;   // "GGUF", "GGML", "SAFETENSORS", "PYTORCH", "ONNX"
+  uint64 region_addr = 4;    // Virtual memory address of the matched region
+  uint64 region_size = 5;    // Size of the mapped region in bytes
+}
+
+// ─── Agent GUI Events ───────────────────────────
+
+message HelpRequest {
+  string agent_id = 1;
+  string contestant_id = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+message HelpResponse {
+  bool acknowledged = 1;
+  string message = 2; // e.g. "Proctor notified"
+}
+
+message DisconnectRequest {
+  string agent_id = 1;
+  string contestant_id = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+message DisconnectResponse {
+  bool acknowledged = 1;
 }

@@ -62,12 +62,18 @@ services:
       DEBUG: "false"
       DATABASE_URL: postgresql+asyncpg://voight:${DB_PASSWORD:-voight_secret_prod}@postgres:5432/voight_db
       REDIS_URL: redis://:${REDIS_PASSWORD:-voight_redis_prod}@redis:6379/0
-      JWT_SECRET_KEY: ${JWT_SECRET:-change-this-in-production-immediately}
+      JWT_SECRET_KEY: ${JWT_SECRET:?JWT_SECRET is required - generate with: python -c \"import secrets; print(secrets.token_urlsafe(64))\"}
       GRPC_PORT: "50051"
+      GRPC_TLS_ENABLED: "true"
+      GRPC_CA_CERT_PATH: /certs/ca-cert.pem
+      GRPC_SERVER_CERT_PATH: /certs/server-cert.pem
+      GRPC_SERVER_KEY_PATH: /certs/server-key.pem
       CORS_ORIGINS: '["http://localhost","https://${DOMAIN:-localhost}"]'
     ports:
       - "8000:8000"
       - "50051:50051"
+    volumes:
+      - ../deploy/certs/generated:/certs:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,7 +103,7 @@ services:
       ENVIRONMENT: production
       DATABASE_URL: postgresql+asyncpg://voight:${DB_PASSWORD:-voight_secret_prod}@postgres:5432/voight_db
       REDIS_URL: redis://:${REDIS_PASSWORD:-voight_redis_prod}@redis:6379/0
-      JWT_SECRET_KEY: ${JWT_SECRET:-change-this-in-production-immediately}
+      JWT_SECRET_KEY: ${JWT_SECRET:?JWT_SECRET is required - generate with: python -c \"import secrets; print(secrets.token_urlsafe(64))\"}
     depends_on:
       postgres:
         condition: service_healthy

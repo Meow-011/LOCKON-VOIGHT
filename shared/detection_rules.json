@@ -1,0 +1,75 @@
+{
+  "_comment": "LOCKON VOIGHT — Shared AI Detection Rules (Single Source of Truth). Used by both Go Agent and Python Server.",
+
+  "ai_domains": {
+    "critical": [
+      "api.openai.com",
+      "chat.openai.com",
+      "chatgpt.com",
+      "openai.com",
+      "api.anthropic.com",
+      "claude.ai"
+    ],
+    "high": [
+      "generativelanguage.googleapis.com",
+      "gemini.google.com",
+      "aistudio.google.com",
+      "api.deepseek.com",
+      "chat.deepseek.com",
+      "api.mistral.ai",
+      "chat.mistral.ai",
+      "api.cohere.ai",
+      "api.perplexity.ai",
+      "api.groq.com",
+      "api.together.xyz",
+      "api-inference.huggingface.co",
+      "copilot-proxy.githubusercontent.com",
+      "api.githubcopilot.com",
+      "api.replicate.com",
+      "x.ai",
+      "api.x.ai",
+      "openrouter.ai",
+      "api.openrouter.ai",
+      "api.fireworks.ai",
+      "api.cerebras.ai",
+      "api.sambanova.ai"
+    ]
+  },
+
+  "ai_process_names": [
+    "cursor", "cursor.exe",
+    "windsurf", "windsurf.exe",
+    "zed", "zed.exe",
+    "aide", "aide.exe",
+    "ollama", "ollama.exe", "ollama_llama_server", "ollama_llama_server.exe",
+    "lms", "lms.exe", "lm-studio", "lm studio.exe",
+    "vllm", "llamacpp", "llama-server", "llama-server.exe",
+    "koboldcpp", "koboldcpp.exe",
+    "text-generation-server",
+    "localai", "localai.exe",
+    "autogpt", "opendevin", "devika",
+    "aider", "aider.exe",
+    "continue", "continue.exe",
+    "transformers-cli"
+  ],
+
+  "model_file_extensions": [
+    ".gguf",
+    ".safetensors",
+    ".ggml",
+    ".bin",
+    ".pth",
+    ".onnx"
+  ],
+
+  "model_file_size_min_mb": 100,
+
+  "memory_signatures": {
+    "_comment": "Base64-encoded magic byte patterns for AI model formats in process memory",
+    "GGUF": "R0dVRg==",
+    "GGML": "Z2phbQ==",
+    "SAFETENSORS": "eyAi",
+    "PYTORCH": "gAI=",
+    "ONNX": "CAYC"
+  }
+}

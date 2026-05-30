@@ -24,11 +24,17 @@ agent/test_win.go
 agent/github.com/
 agent/voight/
 agent/*.syso
+agent/fyne-cross/
 
 # ── Node.js ──
 node_modules/
 dashboard/dist/
+dashboard/dist-ssr/
 .vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # ── IDE ──
 .vscode/
@@ -74,3 +80,7 @@ dashboard/public/downloads/*.zip
 test.go
 test_*.py
 details.txt
+
+# ── Dependencies / Compilers ──
+gcc.zip
+gcc_out/

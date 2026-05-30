@@ -279,6 +279,100 @@ func (c *Client) SendFileAlert(ctx context.Context, contestantID string, alert m
 	return nil
 }
 
+// SendMemoryFinding sends a memory forensics finding to the server.
+func (c *Client) SendMemoryFinding(ctx context.Context, contestantID string, finding monitor.MemoryFinding) error {
+	report := &pb.TelemetryReport{
+		AgentId:      c.cfg.AgentID,
+		ContestantId: contestantID,
+		Timestamp:    timestamppb.Now(),
+		Payload: &pb.TelemetryReport_MemoryFinding{
+			MemoryFinding: &pb.MemoryFinding{
+				Pid:         finding.PID,
+				ProcessName: finding.ProcessName,
+				ModelFormat: finding.ModelFormat,
+				RegionAddr:  finding.RegionAddr,
+				RegionSize:  finding.RegionSize,
+			},
+		},
+	}
+	if err := c.sendTelemetryReport(ctx, report); err != nil {
+		return err
+	}
+	log.Printf("[gRPC] Sent memory finding: %s tensor in PID %d (%s)", finding.ModelFormat, finding.PID, finding.ProcessName)
+	return nil
+}
+
+// SendEbpfAlert sends an eBPF kernel event alert to the server.
+func (c *Client) SendEbpfAlert(ctx context.Context, contestantID string, eventType, processName string, pid int32, detail, category string) error {
+	report := &pb.TelemetryReport{
+		AgentId:      c.cfg.AgentID,
+		ContestantId: contestantID,
+		Timestamp:    timestamppb.Now(),
+		Payload: &pb.TelemetryReport_EbpfAlert{
+			EbpfAlert: &pb.EbpfAlert{
+				EventType:   eventType,
+				Pid:         pid,
+				ProcessName: processName,
+				Detail:      detail,
+				Category:    category,
+			},
+		},
+	}
+	if err := c.sendTelemetryReport(ctx, report); err != nil {
+		return err
+	}
+	log.Printf("[gRPC] Sent eBPF alert: %s %s (PID %d, category: %s)", eventType, processName, pid, category)
+	return nil
+}
+
+// SendHelpRequest sends a manual help request to the proctor.
+func (c *Client) SendHelpRequest(ctx context.Context, contestantID string) error {
+	if c.conn == nil {
+		return fmt.Errorf("gRPC connection not established")
+	}
+	client := pb.NewTelemetryServiceClient(c.conn)
+	
+	req := &pb.HelpRequest{
+		AgentId:      c.cfg.AgentID,
+		ContestantId: contestantID,
+		Timestamp:    timestamppb.Now(),
+	}
+	
+	resp, err := client.RequestHelp(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to send help request: %w", err)
+	}
+	if !resp.Acknowledged {
+		return fmt.Errorf("server rejected help request")
+	}
+	log.Println("[gRPC] Sent Help Request successfully.")
+	return nil
+}
+
+// SendDisconnect sends an intentional disconnect signal to the server.
+func (c *Client) SendDisconnect(ctx context.Context, contestantID string) error {
+	if c.conn == nil {
+		return fmt.Errorf("gRPC connection not established")
+	}
+	client := pb.NewTelemetryServiceClient(c.conn)
+	
+	req := &pb.DisconnectRequest{
+		AgentId:      c.cfg.AgentID,
+		ContestantId: contestantID,
+		Timestamp:    timestamppb.Now(),
+	}
+	
+	resp, err := client.Disconnect(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to send disconnect request: %w", err)
+	}
+	if !resp.Acknowledged {
+		return fmt.Errorf("server rejected disconnect request")
+	}
+	log.Println("[gRPC] Sent Disconnect signal successfully.")
+	return nil
+}
+
 // Enroll sends an enrollment request to the server.
 func (c *Client) Enroll(ctx context.Context, token string, fingerprint interface{}, agentVersion, binaryHash string) (interface{}, error) {
 	if c.conn == nil {

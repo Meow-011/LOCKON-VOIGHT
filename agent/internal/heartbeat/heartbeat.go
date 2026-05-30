@@ -35,19 +35,21 @@ type Manager struct {
 	checker   *integrity.Checker
 	sendFn    SendFunc
 	onConfig  func(*pb.AgentConfig)
+	onWarning func(bool)
 	mu        sync.RWMutex
 	status    Status
 	interval  time.Duration
 }
 
 // NewManager creates a new heartbeat manager.
-func NewManager(cfg *config.Config, checker *integrity.Checker, sendFn SendFunc, onConfig func(*pb.AgentConfig)) *Manager {
+func NewManager(cfg *config.Config, checker *integrity.Checker, sendFn SendFunc, onConfig func(*pb.AgentConfig), onWarning func(bool)) *Manager {
 	return &Manager{
-		cfg:      cfg,
-		checker:  checker,
-		sendFn:   sendFn,
-		onConfig: onConfig,
-		interval: cfg.HeartbeatInterval,
+		cfg:       cfg,
+		checker:   checker,
+		sendFn:    sendFn,
+		onConfig:  onConfig,
+		onWarning: onWarning,
+		interval:  cfg.HeartbeatInterval,
 		status: Status{
 			IsHealthy: true,
 		},
@@ -140,7 +142,14 @@ func (m *Manager) sendHeartbeat(ctx context.Context) {
 	
 	if deployWarning {
 		log.Println("[WARNING PAYLOAD] Triggering Screen-Lock Warning Payload!")
-		go triggerScreenLockWarning(m.cfg.ServerAddress)
+		go func() {
+			triggerScreenLockWarning(m.cfg.ServerAddress)
+			
+			// OS Lock screen closed. Start the 30-second GUI countdown.
+			if m.onWarning != nil {
+				m.onWarning(true)
+			}
+		}()
 	}
 }
 
@@ -175,8 +184,8 @@ func triggerScreenLockWarning(serverAddr string) {
 		lockMu.Unlock()
 		return
 	}
-	// 60-second grace period AFTER the lock screen closes
-	if time.Since(lastLockTime) < 60*time.Second {
+	// 30-second grace period AFTER the lock screen closes
+	if time.Since(lastLockTime) < 30*time.Second {
 		lockMu.Unlock()
 		return
 	}

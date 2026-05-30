@@ -69,6 +69,14 @@ class TelemetryServicer:
                         await self._handle_file_alert(
                             db, contestant_id, report.file_alert
                         )
+                    elif payload_type == "ebpf_alert":
+                        await self._handle_ebpf_alert(
+                            db, contestant_id, report.ebpf_alert
+                        )
+                    elif payload_type == "memory_finding":
+                        await self._handle_memory_finding(
+                            db, contestant_id, report.memory_finding
+                        )
 
             except Exception as e:
                 logger.error(f"Error processing telemetry: {e}")
@@ -133,6 +141,49 @@ class TelemetryServicer:
             logger.error(f"Heartbeat error: {e}")
             return telemetry_pb2.HeartbeatResponse(acknowledged=False)
 
+    async def RequestHelp(self, request, context):
+        """Handle a help request from the contestant's GUI."""
+        try:
+            import uuid
+            contestant_id = uuid.UUID(request.contestant_id)
+            async with async_session_factory() as db:
+                await IncidentService.create_incident(
+                    db,
+                    contestant_id,
+                    ioa_type="HELP_REQUEST",
+                    severity="INFO",
+                    details=f"Contestant requested help via Agent GUI",
+                    raw_data={}
+                )
+            logger.info(f"Help request received from contestant {contestant_id}")
+            return telemetry_pb2.HelpResponse(
+                acknowledged=True,
+                message="Help request sent to Proctor."
+            )
+        except Exception as e:
+            logger.error(f"RequestHelp error: {e}")
+            return telemetry_pb2.HelpResponse(acknowledged=False)
+
+    async def Disconnect(self, request, context):
+        """Handle intentional disconnect from the contestant's GUI."""
+        try:
+            import uuid
+            contestant_id = uuid.UUID(request.contestant_id)
+            async with async_session_factory() as db:
+                await IncidentService.create_incident(
+                    db,
+                    contestant_id,
+                    ioa_type="INTENTIONAL_DISCONNECT",
+                    severity="CRITICAL",
+                    details=f"Contestant intentionally disconnected the agent via GUI",
+                    raw_data={}
+                )
+            logger.warning(f"Intentional disconnect received from contestant {contestant_id}")
+            return telemetry_pb2.DisconnectResponse(acknowledged=True)
+        except Exception as e:
+            logger.error(f"Disconnect error: {e}")
+            return telemetry_pb2.DisconnectResponse(acknowledged=False)
+
     async def _handle_process_snapshot(self, db, contestant_id, snapshot):
         """Process a process snapshot."""
         processes = []
@@ -184,10 +235,18 @@ class TelemetryServicer:
             "vram_mb": snapshot.vram_mb,
         })
 
-        if snapshot.gpu_percent > 80:
+        # Check for GPU anomalies (sustained high usage indicates LLM inference)
+        if snapshot.gpu_percent > settings.RESOURCE_GPU_SPIKE_THRESHOLD:
             await IncidentService.process_telemetry_and_score(
                 db, contestant_id, "GPU_SPIKE",
                 evidence=f"GPU: {snapshot.gpu_percent:.1f}%",
+            )
+
+        # Check for VRAM anomalies (>4GB sustained = likely LLM model loaded)
+        if snapshot.vram_mb > settings.RESOURCE_VRAM_SPIKE_THRESHOLD_MB:
+            await IncidentService.process_telemetry_and_score(
+                db, contestant_id, "VRAM_SPIKE",
+                evidence=f"VRAM: {snapshot.vram_mb:.0f}MB (threshold: {settings.RESOURCE_VRAM_SPIKE_THRESHOLD_MB}MB)",
             )
 
     async def _handle_file_alert(self, db, contestant_id, alert):
@@ -195,6 +254,45 @@ class TelemetryServicer:
         await IncidentService.process_telemetry_and_score(
             db, contestant_id, "MODEL_FILE",
             evidence=f"File: {alert.file_name} ({alert.file_size_bytes / 1024 / 1024:.1f}MB, {alert.file_type})",
+        )
+
+    async def _handle_ebpf_alert(self, db, contestant_id, alert):
+        """Process an eBPF kernel-level detection event.
+
+        Routes events based on category:
+        - AI process executions → EBPF_EXEC_AI
+        - Model file access → EBPF_FILE_MODEL_ACCESS
+        - Network connections are handled by the existing NetworkMonitor
+        """
+        ioa_type = None
+        if alert.category in ("AI_EDITOR", "LOCAL_LLM", "AI_AGENT"):
+            ioa_type = "EBPF_EXEC_AI"
+        elif alert.category == "MODEL_FILE":
+            ioa_type = "EBPF_FILE_MODEL_ACCESS"
+
+        if ioa_type:
+            await IncidentService.process_telemetry_and_score(
+                db, contestant_id, ioa_type,
+                evidence=(
+                    f"eBPF {alert.event_type}: {alert.process_name} "
+                    f"(PID: {alert.pid}, detail: {alert.detail})"
+                ),
+            )
+
+    async def _handle_memory_finding(self, db, contestant_id, finding):
+        """Process a memory forensics finding — AI model tensor detected in RAM.
+
+        This is a high-confidence indicator: if a model tensor is loaded in memory,
+        the contestant is actively running or has recently run an AI model.
+        """
+        region_size_mb = finding.region_size / (1024 * 1024)
+        await IncidentService.process_telemetry_and_score(
+            db, contestant_id, "MEMORY_MODEL_LOADED",
+            evidence=(
+                f"Memory: {finding.model_format} tensor in PID {finding.pid} "
+                f"({finding.process_name}) at 0x{finding.region_addr:x} "
+                f"(region: {region_size_mb:.0f}MB)"
+            ),
         )
 
 
@@ -261,7 +359,7 @@ class EnrollmentServicer:
 
 
 async def serve_grpc():
-    """Start the gRPC server."""
+    """Start the gRPC server with optional mTLS."""
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=settings.GRPC_MAX_WORKERS))
 
     # Register generated servicers here after protoc compilation:
@@ -269,12 +367,31 @@ async def serve_grpc():
     telemetry_pb2_grpc.add_TelemetryServiceServicer_to_server(TelemetryServicer(), server)
     enrollment_pb2_grpc.add_EnrollmentServiceServicer_to_server(EnrollmentServicer(), server)
 
-    # TLS configuration
-    # server_credentials = grpc.ssl_server_credentials(...)
-    # server.add_secure_port(f'[::]:{settings.GRPC_PORT}', server_credentials)
+    if settings.GRPC_TLS_ENABLED:
+        # ── mTLS: Mutual TLS with client certificate verification ──
+        try:
+            with open(settings.GRPC_CA_CERT_PATH, "rb") as f:
+                ca_cert = f.read()
+            with open(settings.GRPC_SERVER_KEY_PATH, "rb") as f:
+                server_key = f.read()
+            with open(settings.GRPC_SERVER_CERT_PATH, "rb") as f:
+                server_cert = f.read()
 
-    # For development: insecure port
-    server.add_insecure_port(f"[::]:{settings.GRPC_PORT}")
+            server_credentials = grpc.ssl_server_credentials(
+                [(server_key, server_cert)],
+                root_certificates=ca_cert,
+                require_client_auth=True,  # mTLS: require agent client cert
+            )
+            server.add_secure_port(f"[::]:{settings.GRPC_PORT}", server_credentials)
+            logger.info(f"[gRPC] mTLS ENABLED on port {settings.GRPC_PORT}")
+        except FileNotFoundError as e:
+            logger.error(f"[gRPC] FATAL: TLS certificate file not found: {e}")
+            logger.error("[gRPC] Generate certificates with: deploy/certs/generate-ca.sh")
+            raise
+    else:
+        # ── Development: Insecure transport ──
+        server.add_insecure_port(f"[::]:{settings.GRPC_PORT}")
+        logger.warning("[gRPC] Running WITHOUT TLS (development mode)")
 
     logger.info(f"[gRPC] Starting server on port {settings.GRPC_PORT}...")
     await server.start()
@@ -285,3 +402,4 @@ async def serve_grpc():
     except asyncio.CancelledError:
         logger.info("[gRPC] Stopping server gracefully...")
         await server.stop(grace=None)
+

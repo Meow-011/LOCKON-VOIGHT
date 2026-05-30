@@ -50,9 +50,46 @@ type Config struct {
 	CompetitionID string `json:"competition_id"`
 }
 
+// SharedDetectionRules represents the shared detection_rules.json structure.
+type SharedDetectionRules struct {
+	AIDomains struct {
+		Critical []string `json:"critical"`
+		High     []string `json:"high"`
+	} `json:"ai_domains"`
+	AIProcessNames      []string `json:"ai_process_names"`
+	ModelFileExtensions []string `json:"model_file_extensions"`
+	ModelFileSizeMinMB  int64    `json:"model_file_size_min_mb"`
+}
+
+// loadSharedRules attempts to load shared detection rules from a JSON file.
+// Returns nil if the file is not found (expected when agent runs standalone).
+func loadSharedRules() *SharedDetectionRules {
+	// Try common locations relative to the binary
+	searchPaths := []string{
+		"shared/detection_rules.json",
+		"../shared/detection_rules.json",
+		"../../shared/detection_rules.json",
+	}
+
+	for _, path := range searchPaths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var rules SharedDetectionRules
+		if err := json.Unmarshal(data, &rules); err != nil {
+			continue
+		}
+		return &rules
+	}
+	return nil
+}
+
 // DefaultConfig returns a Config with sensible defaults.
+// It attempts to load shared detection rules from shared/detection_rules.json
+// as the single source of truth. Falls back to hardcoded defaults if not found.
 func DefaultConfig() *Config {
-	return &Config{
+	cfg := &Config{
 		ServerAddress:        "localhost",
 		GRPCPort:             50052,
 		UseTLS:               true,
@@ -62,86 +99,60 @@ func DefaultConfig() *Config {
 		ResourceScanSec:      5,
 		ModelFileSizeMinMB:   100, // Only flag files > 100MB
 
-		// Default AI process names to detect
+		// Default AI process names to detect (fallback if shared rules not found)
 		AIProcessNames: []string{
-			// AI Code Editors
-			"cursor", "cursor.exe",
-			"windsurf", "windsurf.exe",
-			"zed", "zed.exe",
-			"aide", "aide.exe",
-			// Local LLM Runtimes
+			"cursor", "cursor.exe", "windsurf", "windsurf.exe",
+			"zed", "zed.exe", "aide", "aide.exe",
 			"ollama", "ollama.exe", "ollama_llama_server", "ollama_llama_server.exe",
 			"lms", "lms.exe", "lm-studio", "lm studio.exe",
 			"vllm", "llamacpp", "llama-server", "llama-server.exe",
-			"koboldcpp", "koboldcpp.exe",
-			"text-generation-server",
+			"koboldcpp", "koboldcpp.exe", "text-generation-server",
 			"localai", "localai.exe",
-			// AI Agents
 			"autogpt", "opendevin", "devika",
-			"aider", "aider.exe",
-			"continue", "continue.exe",
-			// Python-based (may appear as python with specific args)
+			"aider", "aider.exe", "continue", "continue.exe",
 			"transformers-cli",
 		},
 
-		// Default AI API domains to detect
+		// Default AI API domains to detect (fallback if shared rules not found)
 		AIDomains: []string{
-			// OpenAI
-			"api.openai.com",
-			"chat.openai.com",
-			// Anthropic
-			"api.anthropic.com",
-			"claude.ai",
-			// Google
-			"generativelanguage.googleapis.com",
-			"gemini.google.com",
-			"aistudio.google.com",
-			// DeepSeek
-			"api.deepseek.com",
-			"chat.deepseek.com",
-			// Mistral
-			"api.mistral.ai",
-			// Cohere
-			"api.cohere.ai",
-			// Perplexity
-			"api.perplexity.ai",
-			// Groq
-			"api.groq.com",
-			// Together
-			"api.together.xyz",
-			// Hugging Face
-			"api-inference.huggingface.co",
-			// Replicate
-			"api.replicate.com",
-			// xAI (Grok)
-			"x.ai",
-			"api.x.ai",
-			// OpenRouter
-			"openrouter.ai",
-			"api.openrouter.ai",
-			// Mistral Chat
-			"chat.mistral.ai",
-			// ChatGPT (New domain)
-			"chatgpt.com",
-			// Other enterprise AI inference
-			"api.fireworks.ai",
-			"api.cerebras.ai",
-			"api.sambanova.ai",
+			"api.openai.com", "chat.openai.com", "chatgpt.com", "openai.com",
+			"api.anthropic.com", "claude.ai",
+			"generativelanguage.googleapis.com", "gemini.google.com", "aistudio.google.com",
+			"api.deepseek.com", "chat.deepseek.com",
+			"api.mistral.ai", "chat.mistral.ai", "api.cohere.ai",
+			"api.perplexity.ai", "api.groq.com", "api.together.xyz",
+			"api-inference.huggingface.co", "api.replicate.com",
+			"x.ai", "api.x.ai", "openrouter.ai", "api.openrouter.ai",
+			"api.fireworks.ai", "api.cerebras.ai", "api.sambanova.ai",
 		},
 
 		// Model file extensions to scan
 		ModelFileExtensions: []string{
-			".gguf",        // llama.cpp quantized models
-			".safetensors", // HuggingFace safe format
-			".ggml",        // Legacy GGML format
-			".bin",         // PyTorch binary (needs size check)
-			".pth",         // PyTorch checkpoint
-			".onnx",        // ONNX models
+			".gguf", ".safetensors", ".ggml", ".bin", ".pth", ".onnx",
 		},
 
 		// Default paths to scan for model files
 		FileScanPaths: []string{},
 	}
+
+	// Override defaults with shared rules if available
+	if rules := loadSharedRules(); rules != nil {
+		allDomains := append(rules.AIDomains.Critical, rules.AIDomains.High...)
+		if len(allDomains) > 0 {
+			cfg.AIDomains = allDomains
+		}
+		if len(rules.AIProcessNames) > 0 {
+			cfg.AIProcessNames = rules.AIProcessNames
+		}
+		if len(rules.ModelFileExtensions) > 0 {
+			cfg.ModelFileExtensions = rules.ModelFileExtensions
+		}
+		if rules.ModelFileSizeMinMB > 0 {
+			cfg.ModelFileSizeMinMB = rules.ModelFileSizeMinMB
+		}
+	}
+
+	return cfg
 }
 
 // LoadFromFile reads config from a JSON file.

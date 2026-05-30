@@ -9,8 +9,11 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.database import get_db
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -62,8 +65,12 @@ def decode_token(token: str) -> dict:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Dependency: Extract and validate the current user from JWT."""
+    """Dependency: Extract JWT, validate, and verify user still exists in DB.
+
+    This ensures deleted or deactivated users cannot use stale tokens.
+    """
     payload = decode_token(credentials.credentials)
     if payload.get("type") != "access":
         raise HTTPException(
@@ -76,7 +83,21 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token missing subject",
         )
-    return {"username": username, "role": payload.get("role", "proctor")}
+
+    # Verify user still exists and is active in the database
+    from app.models import Proctor
+    result = await db.execute(
+        select(Proctor).where(Proctor.username == username)
+    )
+    proctor = result.scalar_one_or_none()
+
+    if not proctor or not proctor.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account not found or deactivated",
+        )
+
+    return {"username": proctor.username, "role": proctor.role}
 
 
 async def require_admin(current_user: dict = Depends(get_current_user)) -> dict:

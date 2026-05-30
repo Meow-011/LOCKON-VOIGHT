@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.services.telemetry import TelemetryService, IncidentService
 from app.services.competition import ContestantService
 from app.scoring.engine import scoring_engine
@@ -80,16 +81,16 @@ async def ingest_resources(
     await TelemetryService.ingest_resources(db, body.contestant_id, body.model_dump())
 
     # Check for GPU anomalies
-    if body.gpu_percent > 80:
+    if body.gpu_percent > settings.RESOURCE_GPU_SPIKE_THRESHOLD:
         await IncidentService.process_telemetry_and_score(
             db, body.contestant_id, "GPU_SPIKE",
             evidence=f"GPU: {body.gpu_percent:.1f}%, VRAM: {body.vram_mb:.0f}MB",
         )
 
-    if body.vram_mb > 4096:
+    if body.vram_mb > settings.RESOURCE_VRAM_SPIKE_THRESHOLD_MB:
         await IncidentService.process_telemetry_and_score(
             db, body.contestant_id, "VRAM_SPIKE",
-            evidence=f"VRAM: {body.vram_mb:.0f}MB (threshold: 4096MB)",
+            evidence=f"VRAM: {body.vram_mb:.0f}MB (threshold: {settings.RESOURCE_VRAM_SPIKE_THRESHOLD_MB}MB)",
         )
 
     return MessageResponse(message="Resource snapshot ingested")

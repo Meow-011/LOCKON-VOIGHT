@@ -1,4 +1,4 @@
-.PHONY: build build-windows build-linux build-watchdog clean proto all
+.PHONY: build build-windows build-linux build-watchdog clean proto all ebpf-generate bundle-linux-ebpf
 
 BINARY_NAME=voight-sentinel
 WATCHDOG_NAME=voight-watchdog
@@ -14,9 +14,13 @@ all: build build-watchdog
 build:
 	go build $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/voight
 
-# Cross-compile agent for Windows
+# Cross-compile agent for Windows (CLI)
 build-windows:
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o bin/$(BINARY_NAME).exe ./cmd/voight
+
+# Cross-compile agent for Windows (GUI - Hides console)
+build-windows-gui:
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -ldflags="-H=windowsgui" -o bin/$(BINARY_NAME)-gui.exe ./cmd/voight
 
 # Cross-compile agent for Linux
 build-linux:
@@ -60,6 +64,16 @@ proto:
 		--proto_path=../proto \
 		../proto/voight/telemetry.proto \
 		../proto/voight/enrollment.proto
+
+# ─── eBPF (Linux Only) ───────────────────────
+
+# Generate eBPF bytecode from C programs (requires Linux + clang + linux-headers)
+# First time: bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/ebpf/vmlinux.h
+ebpf-generate:
+	cd internal/ebpf && go generate
+
+# Build Linux agent with eBPF support
+bundle-linux-ebpf: ebpf-generate bundle-linux
 
 # Run the agent locally (development)
 run:

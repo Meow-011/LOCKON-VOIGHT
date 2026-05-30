@@ -20,12 +20,13 @@
 
 ---
 
-> *"Is this testing whether I'm a replicant or a lesbian, Mr. Deckard?"* 
+> _"Is this testing whether I'm a replicant or a lesbian, Mr. Deckard?"_
+>
 > - **Blade Runner (1982)**
 
 ### The Voight-Kampff Protocol
 
-In the cyberpunk classic *Blade Runner*, the Voight-Kampff (V-K) machine is an advanced polygraph used to distinguish synthetic Replicants (AI) from authentic humans through autonomic responses. 
+In the cyberpunk classic _Blade Runner_, the Voight-Kampff (V-K) machine is an advanced polygraph used to distinguish synthetic Replicants (AI) from authentic humans through autonomic responses.
 
 **LOCKON VOIGHT** (Integrity Protocol) brings this concept into the modern cyber-warfare era. It is a real-time telemetry monitoring system designed to administer a digital "Voight-Kampff test" to connected endpoints. By analyzing process trees, local DNS profiling, and hardware resource spikes, VOIGHT distinguishes **authentic human problem-solving** from **unauthorized synthetic assistance** (e.g., ChatGPT, GitHub Copilot, local LLMs) during high-stakes cybersecurity competitions and CTF events.
 
@@ -60,21 +61,22 @@ In the cyberpunk classic *Blade Runner*, the Voight-Kampff (V-K) machine is an a
 
 ## Tech Stack
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| **Agent** | Go 1.22 + gopsutil | Low-overhead endpoint monitoring |
-| **Server** | FastAPI + gRPC + Celery | Telemetry ingestion & scoring |
-| **Dashboard** | React + MUI + Recharts | Real-time proctor interface |
-| **Database** | PostgreSQL + TimescaleDB | Time-series telemetry storage |
-| **Cache/Queue** | Redis 7 | Celery broker + caching |
-| **Security** | mTLS (TLS 1.3) + JWT + RBAC | Agent auth + API auth + Role-based access |
+| Layer           | Technology                  | Purpose                                          |
+| --------------- | --------------------------- | ------------------------------------------------ |
+| **Agent**       | Go 1.22 + Fyne + gopsutil   | Low-overhead endpoint monitoring with Native GUI |
+| **Server**      | FastAPI + gRPC + Celery     | Telemetry ingestion & scoring                    |
+| **Dashboard**   | React + MUI + Recharts      | Real-time proctor interface                      |
+| **Database**    | PostgreSQL + TimescaleDB    | Time-series telemetry storage                    |
+| **Cache/Queue** | Redis 7                     | Celery broker + caching                          |
+| **Security**    | mTLS (TLS 1.3) + JWT + RBAC | Agent auth + API auth + Role-based access        |
 
 ## Core Features
 
 - **Fleet Command Interface**: A centralized tactical dashboard for managing all connected Sentinel nodes, including real-time resource telemetry (CPU/RAM/GPU), network topology, and execution of administrative payloads.
 - **Deep Inspection Analysis**: Raw telemetry payloads (such as intercepted process execution paths or malicious DNS correlations) are dynamically parsed and displayed as structured JSON in the Incident Review modal, allowing Proctors to make high-confidence assessments.
 - **Node Identity Management**: Full CRUD capabilities for Contestant Metadata, allowing Control Operators to dynamically edit handles and team names, or safely decommission untrusted agents via the interface.
-- **Tactical Screen Lock Payload**: Aggressive, full-screen visual payload that locks the contestant's screen upon detection of severe unauthorized synthetic assistance. Supports dynamic remote asset injection (`LockScreen.png`), providing a cinematic, zero-gap warning interface.
+- **Agent Desktop GUI**: A native graphical interface (built with Fyne) that runs in the background, displaying real-time connection health, warning countdowns, and allowing contestants to securely request Proctor assistance.
+- **Tactical Screen Lock Payload**: Aggressive, full-screen visual payload via the Fyne GUI that locks the contestant's screen upon detection of severe unauthorized synthetic assistance. Supports dynamic remote asset injection (`LockScreen.png`), providing a cinematic, zero-gap warning interface.
 - **Live Operation Timers (T+)**: Automated mission duration tracking that synchronizes with competition states, providing a pulsing `T+ 00:00:00` display for active missions.
 - **Decoupled State Management**: Zero-flash UI updates using TanStack Query and WebSocket data streams for instantaneous integrity badge updates.
 - **Zero-Trust Sentinel Enrollment**: Automated token generation for agents, ensuring robust node identity mapping via hardware fingerprinting (MAC, CPU UUID).
@@ -87,52 +89,52 @@ In the cyberpunk classic *Blade Runner*, the Voight-Kampff (V-K) machine is an a
 
 ## Replicant Behavior Profiling (IoA Detection)
 
-| Behavioral Anomaly (IoA) | Weight | Profiling Vector |
-|---|---|---|
-| Binary Tamper | 100 | SHA-256 self-hash verification |
-| Heartbeat Lost | 95 | Watchdog + timeout detection |
-| Local LLM (Ollama, LM Studio) | 90 | Process name + cmdline + **Absolute Path** |
-| AI API (OpenAI, Anthropic) | 90 | **Local DNS Cache Profiling** + Domain matching |
-| AI Agent (AutoGPT, OpenDevin) | 85 | Process detection |
-| AI Editor (Cursor, Windsurf) | 80 | Process + extension scan + **Absolute Path** |
-| Model File (.gguf, .safetensors) | 70 | Filesystem scan |
-| VRAM Spike (>4GB sustained) | 60 | nvidia-smi monitoring |
-| GPU Spike (>80% sustained) | 50 | nvidia-smi monitoring |
-| Virtualization (WSL2/Docker) | 40 | Process detection (`vmmem`, `wsl.exe`) |
+| Behavioral Anomaly (IoA)                | Weight | Profiling Vector                                |
+| --------------------------------------- | ------ | ----------------------------------------------- |
+| Binary Tamper                           | 100    | SHA-256 self-hash verification                  |
+| Heartbeat Lost                          | 95     | Watchdog + timeout detection                    |
+| Local LLM (Ollama, LM Studio)           | 90     | Process name + cmdline + **Absolute Path**      |
+| AI API (OpenAI, Anthropic)              | 90     | **Local DNS Cache Profiling** + Domain matching |
+| AI Agent (AutoGPT, OpenDevin)           | 85     | Process detection                               |
+| AI Editor (Cursor, Windsurf)            | 80     | Process + extension scan + **Absolute Path**    |
+| Model File (.gguf, .safetensors)        | 70     | Filesystem scan                                 |
+| VRAM Spike (configurable, default >4GB) | 60     | nvidia-smi monitoring                           |
+| GPU Spike (configurable, default >80%)  | 50     | nvidia-smi monitoring                           |
+| Virtualization (WSL2/Docker)            | 40     | Process detection (`vmmem`, `wsl.exe`)          |
 
 ### Advanced Anti-Cheat Mechanisms
 
 LOCKON VOIGHT goes beyond simple string matching. It implements several advanced countermeasures against cheating techniques often employed by Red Teams and advanced CTF participants:
 
 1. **Defeating CDN / Reverse DNS Masking (DNS Cache Profiling)**
-   - *The Threat:* APIs like `api.openai.com` are hosted behind CDNs (Cloudflare, AWS). A standard Reverse DNS lookup on the outbound IP often returns the CDN's generic domain, blinding the monitor.
-   - *The Mitigation:* The Agent polls the OS's internal DNS Cache (`Get-DnsClientCache`). When an outbound connection is made to a CDN IP, the Agent instantly correlates it with the exact domain the contestant just resolved, defeating IP masking without requiring invasive packet sniffers (like Wireshark/Npcap).
+   - _The Threat:_ APIs like `api.openai.com` are hosted behind CDNs (Cloudflare, AWS). A standard Reverse DNS lookup on the outbound IP often returns the CDN's generic domain, blinding the monitor.
+   - _The Mitigation:_ The Agent polls the OS's internal DNS Cache (`Get-DnsClientCache`). When an outbound connection is made to a CDN IP, the Agent instantly correlates it with the exact domain the contestant just resolved, defeating IP masking without requiring invasive packet sniffers (like Wireshark/Npcap).
 
 2. **Thwarting Process Renaming (Zero-Trust Signature & Path Extraction)**
-   - *The Threat:* A contestant renames `cursor.exe` or `ollama.exe` to `notepad.exe` or `svchost.exe` to evade name-based process monitors.
-   - *The Mitigation:* VOIGHT employs three countermeasures:
+   - _The Threat:_ A contestant renames `cursor.exe` or `ollama.exe` to `notepad.exe` or `svchost.exe` to evade name-based process monitors.
+   - _The Mitigation:_ VOIGHT employs three countermeasures:
      1. **Absolute Path Extraction:** Even if renamed, the directory structure (e.g., `AppData/Local/cursor/notepad.exe`) retains the tool's signature.
      2. **Cryptographic Code Signing Verification:** On **Windows**, the Agent reads Authenticode certificates. On **macOS**, it verifies Apple Developer IDs via `codesign`. On **Linux**, it inspects ELF binary metadata, embedded build paths, and queries `dpkg`/`rpm` for package provenance.
      3. **Behavioral Port Scanning:** AI runtimes inherently require opening a local server (e.g., port 11434 for Ollama, 1234 for LM Studio). VOIGHT continuously probes these known TCP ports on `localhost` and virtualized subnets.
 
 3. **Behavioral Port Scanning (Detecting Local & Virtualized Runtimes)**
-   - *The Threat:* A contestant compiles a custom, unsigned binary of an open-source LLM runtime, rendering name, path, and signature checks ineffective. Or they run AI as a background service inside a VM with NAT networking to hide the process from the host.
-   - *The Mitigation:* VOIGHT probes known AI TCP ports (e.g., 11434, 1234, 5001) on **localhost AND dynamically-discovered VM NAT subnets**. The Agent auto-detects VM interfaces (VMware, VirtualBox, KVM, Hyper-V, Docker) and reads the OS **ARP table** to discover actual live guest IPs. It then probes these hidden IPs, completely bypassing VM isolation. VM-based detections are always flagged as intentional.
+   - _The Threat:_ A contestant compiles a custom, unsigned binary of an open-source LLM runtime, rendering name, path, and signature checks ineffective. Or they run AI as a background service inside a VM with NAT networking to hide the process from the host.
+   - _The Mitigation:_ VOIGHT probes known AI TCP ports (e.g., 11434, 1234, 5001) on **localhost AND dynamically-discovered VM NAT subnets**. The Agent auto-detects VM interfaces (VMware, VirtualBox, KVM, Hyper-V, Docker) and reads the OS **ARP table** to discover actual live guest IPs. It then probes these hidden IPs, completely bypassing VM isolation. VM-based detections are always flagged as intentional.
 
 4. **Subsystem & Virtualization Fallbacks (WSL2 / Docker / VM NAT)**
-   - *The Threat:* Contestants run local LLMs inside Windows Subsystem for Linux (WSL2), Docker, or a full VM (VMware/VirtualBox) to hide the internal processes from the host Agent.
-   - *The Mitigation:* VOIGHT automatically flags `wsl.exe`, `vmmemwsl`, and `docker.exe`. Additionally, the **Network Monitor** detects any outbound connection to a private IP (`10.x.x.x`, `172.16.x.x`, `192.168.x.x`) on a known AI port (e.g., `:11434`) and flags it as `AI_SERVICE`, catching cross-machine or VM-to-host AI usage.
+   - _The Threat:_ Contestants run local LLMs inside Windows Subsystem for Linux (WSL2), Docker, or a full VM (VMware/VirtualBox) to hide the internal processes from the host Agent.
+   - _The Mitigation:_ VOIGHT automatically flags `wsl.exe`, `vmmemwsl`, and `docker.exe`. Additionally, the **Network Monitor** detects any outbound connection to a private IP (`10.x.x.x`, `172.16.x.x`, `192.168.x.x`) on a known AI port (e.g., `:11434`) and flags it as `AI_SERVICE`, catching cross-machine or VM-to-host AI usage.
 
 5. **Tunneling & Reverse Proxy Evasion Detection**
-   - *The Threat:* A contestant uses `ssh -L 11434:localhost:11434 remote-server` to tunnel a remote Ollama instance, or uses `socat`, `frp`, `chisel`, `ngrok`, or `netsh portproxy` to forward AI ports from another machine.
-   - *The Mitigation:* VOIGHT scans the command-line arguments (`cmdline`) of every running process. If `ssh` with `-L`/`-R` flags is detected alongside a known AI port number, or if tunneling tools like `socat`/`portproxy` reference an AI port, the process is immediately flagged as an evasion attempt. Common tunneling utilities (`chisel`, `frp`, `ngrok`, `cloudflared`) are also strictly monitored as Evasion tools.
+   - _The Threat:_ A contestant uses `ssh -L 11434:localhost:11434 remote-server` to tunnel a remote Ollama instance, or uses `socat`, `frp`, `chisel`, `ngrok`, or `netsh portproxy` to forward AI ports from another machine.
+   - _The Mitigation:_ VOIGHT scans the command-line arguments (`cmdline`) of every running process. If `ssh` with `-L`/`-R` flags is detected alongside a known AI port number, or if tunneling tools like `socat`/`portproxy` reference an AI port, the process is immediately flagged as an evasion attempt. Common tunneling utilities (`chisel`, `frp`, `ngrok`, `cloudflared`) are also strictly monitored as Evasion tools.
 
 6. **Dynamic Centralized Configurations & Policy Enforcement**
    - The Detection Policy (Blocked Domains, Processes, and File Extensions) as well as Core System Configurations (Agent Scan Intervals, Heartbeat Frequencies) are pushed dynamically from the Proctor Dashboard to all Agents via the REST API (with graceful fallback to gRPC Heartbeats if blocked), taking effect system-wide within 60 seconds without restarting the Agents.
 
 7. **False Positive Suppression & Passive Background Filtering**
-   - *The Threat:* Over-aggressive process scanning flagging dormant VPN services (`tailscaled.exe`) or Windows 11 built-in Copilot background tasks, resulting in mass false-positive lockouts.
-   - *The Mitigation:* VOIGHT separates active network telemetry from passive process execution. Built-in system AI tasks and standard CTF infrastructure tools (OpenVPN, WireGuard) are excluded from the hardcoded blocklist. Detection relies on active Window Focus and DNS resolutions.
+   - _The Threat:_ Over-aggressive process scanning flagging dormant VPN services (`tailscaled.exe`) or Windows 11 built-in Copilot background tasks, resulting in mass false-positive lockouts.
+   - _The Mitigation:_ VOIGHT separates active network telemetry from passive process execution. Built-in system AI tasks and standard CTF infrastructure tools (OpenVPN, WireGuard) are excluded from the hardcoded blocklist. Detection relies on active Window Focus and DNS resolutions.
 
 </br>
 
@@ -145,6 +147,7 @@ LOCKON VOIGHT goes beyond simple string matching. It implements several advanced
 LOCKON VOIGHT is designed with ethical hacking and participant privacy in mind. While the Agent monitors system activity to ensure competition integrity, it strictly limits its scope.
 
 **What VOIGHT Collects:**
+
 - Process names, absolute paths, active window titles, and cryptographic Digital Signatures (Authenticode).
 - Local TCP listening ports for behavioral detection of local servers.
 - Outbound DNS resolutions (domain names and IPs) to known AI infrastructure.
@@ -152,6 +155,7 @@ LOCKON VOIGHT is designed with ethical hacking and participant privacy in mind. 
 - System hardware fingerprints (MAC Address, CPU UUID) for Agent registration.
 
 **What VOIGHT DOES NOT Collect:**
+
 - **No Keylogging:** Keystrokes or input events are never captured.
 - **No File Content Scanning:** Files are scanned for extensions and sizes, but source code or personal file contents are never read or transmitted.
 - **No Packet Sniffing:** We do not perform Deep Packet Inspection (DPI) or intercept SSL/TLS payloads.
@@ -162,40 +166,43 @@ LOCKON VOIGHT is designed with ethical hacking and participant privacy in mind. 
 While LOCKON VOIGHT employs advanced telemetry techniques, we maintain absolute technical transparency regarding its threat model:
 
 - **User-Space Operation:** The Agent operates entirely in user-space (Ring 3). Unlike kernel-level anti-cheat drivers (e.g., Vanguard, BattlEye), VOIGHT does not require invasive OS-level hooks. As a result, it can theoretically be bypassed by sophisticated Ring 0 rootkits or hypervisor-level obfuscation.
-- **Proctor-in-the-Loop Philosophy:** VOIGHT is engineered to be an *alerting mechanism*, not an automated judge. The system calculates Integrity Scores and triggers visual payloads, but the ultimate decision to disqualify a participant rests entirely on the human Control Operator (Proctor) reviewing the accumulated telemetry.
+- **Proctor-in-the-Loop Philosophy:** VOIGHT is engineered to be an _alerting mechanism_, not an automated judge. The system calculates Integrity Scores and triggers visual payloads, but the ultimate decision to disqualify a participant rests entirely on the human Control Operator (Proctor) reviewing the accumulated telemetry.
 - **Fail-Secure Architecture:** If the Agent is forcefully terminated, the Watchdog process will attempt to restart it. If the entire network is isolated, the backend automatically flags the node as `HEARTBEAT_LOST` (IoA Weight: 95), instantly alerting the Proctor to a potential evasion attempt.
 
 ### API Security Architecture
 
 All API endpoints are protected with a layered security model:
 
-| Protection Layer | Scope | Mechanism |
-|---|---|---|
-| **JWT Authentication** | All Dashboard API endpoints | Bearer token via `HTTPBearer` |
-| **Role-Based Access (RBAC)** | Destructive operations (delete, user mgmt) | `require_admin` dependency |
-| **Contestant Validation** | All Telemetry ingestion endpoints | `contestant_id` existence check |
-| **WebSocket Authentication** | Real-time data feeds | JWT token via query parameter (enforced in production) |
-| **Login Rate Limiting** | `/api/auth/login` | 5 attempts per IP per 60 seconds |
-| **File Upload Validation** | Banner uploads | Allowed types: `png, jpg, jpeg, gif, webp` - Max size: 10MB |
-| **JWT Startup Guard** | Server boot | Refuses to start in production with default secret key |
-| **CORS Restriction** | Cross-origin requests | Explicit origin allowlist (no wildcards in production) |
-| **Public Endpoint Isolation** | Agent Download page | Only `competitionKey` exposed via `/api/settings/public` |
+| Protection Layer              | Scope                                      | Mechanism                                                   |
+| ----------------------------- | ------------------------------------------ | ----------------------------------------------------------- |
+| **Mutual TLS (mTLS)**         | Agent ↔ Server gRPC channel                | TLS 1.3 with client certificate verification                |
+| **JWT Authentication**        | All Dashboard API endpoints                | Bearer token via `HTTPBearer`                               |
+| **DB-Level User Validation**  | All authenticated requests                 | Verifies user exists and `is_active` in DB per request      |
+| **Role-Based Access (RBAC)**  | Destructive operations (delete, user mgmt) | `require_admin` dependency                                  |
+| **Contestant Validation**     | All Telemetry ingestion endpoints          | `contestant_id` existence check                             |
+| **WebSocket Authentication**  | Real-time data feeds                       | JWT token via query parameter (enforced in production)      |
+| **Login Rate Limiting**       | `/api/auth/login`                          | 5 attempts per IP per 60 seconds                            |
+| **File Upload Validation**    | Banner uploads                             | Allowed types: `png, jpg, jpeg, gif, webp` - Max size: 10MB |
+| **JWT Startup Guard**         | Server boot                                | Refuses to start in production with default secret key      |
+| **CORS Restriction**          | Cross-origin requests                      | Explicit origin allowlist (no wildcards in production)      |
+| **Public Endpoint Isolation** | Agent Download page                        | Only `competitionKey` exposed via `/api/settings/public`    |
 
 ## System Requirements
 
 **Proctor Server (Backend & Database)**
 Server requirements scale heavily based on the number of concurrent Agents connected, as each Agent streams high-frequency telemetry (Heartbeats, Process Lists, Network Dumps).
 
-| Deployment Scale | CPU | RAM | Storage | Notes |
-|---|---|---|---|---|
-| **Small** (1-50 Agents) | 4 Cores | 8 GB | 50GB SSD | Standard lab or local CTF. |
-| **Medium** (50-250 Agents) | 8 Cores | 16 GB | 100GB NVMe | Regional CTFs. TimescaleDB requires extra RAM for chunking. |
-| **Large** (250-1000+ Agents) | 16+ Cores | 32 GB+ | 250GB+ NVMe | National/Global events. Requires Redis/Postgres tuning. |
+| Deployment Scale             | CPU       | RAM    | Storage     | Notes                                                       |
+| ---------------------------- | --------- | ------ | ----------- | ----------------------------------------------------------- |
+| **Small** (1-50 Agents)      | 4 Cores   | 8 GB   | 50GB SSD    | Standard lab or local CTF.                                  |
+| **Medium** (50-250 Agents)   | 8 Cores   | 16 GB  | 100GB NVMe  | Regional CTFs. TimescaleDB requires extra RAM for chunking. |
+| **Large** (250-1000+ Agents) | 16+ Cores | 32 GB+ | 250GB+ NVMe | National/Global events. Requires Redis/Postgres tuning.     |
 
 - **OS:** Linux (Ubuntu 22.04 LTS recommended) or Windows (via Docker Desktop)
 - **Dependencies:** Docker Engine, Docker Compose
 
 **Contestant Agent**
+
 - **OS:** Windows 10/11, Ubuntu 20.04+, macOS (Intel & Apple Silicon)
 - **Privileges:** Administrator / root (Required for accurate network and process scanning)
 - **Footprint:** < 50MB RAM, < 1% CPU utilization
@@ -204,47 +211,56 @@ Server requirements scale heavily based on the number of concurrent Agents conne
 
 All VOIGHT telemetry and offensive features are fully supported across Windows, Linux, and macOS with full platform parity.
 
-| Feature / Telemetry | Windows | Linux | macOS | Notes |
-|---|:---:|:---:|:---:|---|
-| **Heartbeat & System Metrics** | 🟢 Native | 🟢 Native | 🟢 Native | CPU, RAM, Uptime syncing |
-| **Process Tracking (Basic)** | 🟢 Native | 🟢 Native | 🟢 Native | Process name, PID, basic command-line |
-| **Absolute Path Extraction** | 🟢 Native | 🟢 Native | 🟢 Native | Used to defeat process renaming tricks (both `\` and `/` path separators) |
-| **Local DNS Cache Extraction** | 🟢 PowerShell | 🟢 journalctl | 🟢 mDNSResponder | Core defense against IP/CDN masking (with fallback domain probing) |
-| **GPU / VRAM Monitoring** | 🟢 nvidia-smi | 🟢 nvidia-smi | 🟢 ioreg | Apple Silicon uses IOAccelerator for unified memory GPU detection |
-| **Window Title Scanning** | 🟢 PowerShell | 🟢 xdotool+/proc | 🟢 AppleScript | Browser-only filtering with /proc fallback on headless Linux |
-| **Code Signing Verification** | 🟢 Authenticode | 🟢 ELF+dpkg/rpm | 🟢 codesign | Detects renamed AI executables via binary identity analysis |
-| **Behavioral Port Scanning** | 🟢 Native | 🟢 Native | 🟢 Native | Cross-platform TCP port probing for AI runtimes |
-| **Tactical Screen Lock** | 🟢 WinForms | 🟢 zenity | 🟢 AppleScript | Persistent fullscreen warning with 30s acknowledge countdown |
-| **Tamper & Watchdog Protect**| 🟢 Registry | 🟢 systemd | 🟢 launchd | Auto-restarts agent via native service manager |
-| **Dynamic Config Sync** | 🟢 Native | 🟢 Native | 🟢 Native | Real-time interval updates from Dashboard |
+| Feature / Telemetry            |     Windows     |      Linux       |      macOS       | Notes                                                                     |
+| ------------------------------ | :-------------: | :--------------: | :--------------: | ------------------------------------------------------------------------- |
+| **Heartbeat & System Metrics** |    🟢 Native    |    🟢 Native     |    🟢 Native     | CPU, RAM, Uptime syncing                                                  |
+| **Process Tracking (Basic)**   |    🟢 Native    |    🟢 Native     |    🟢 Native     | Process name, PID, basic command-line                                     |
+| **Absolute Path Extraction**   |    🟢 Native    |    🟢 Native     |    🟢 Native     | Used to defeat process renaming tricks (both `\` and `/` path separators) |
+| **Local DNS Cache Extraction** |  🟢 PowerShell  |  🟢 journalctl   | 🟢 mDNSResponder | Core defense against IP/CDN masking (with fallback domain probing)        |
+| **GPU / VRAM Monitoring**      |  🟢 nvidia-smi  |  🟢 nvidia-smi   |     🟢 ioreg     | Apple Silicon uses IOAccelerator for unified memory GPU detection         |
+| **Window Title Scanning**      |  🟢 PowerShell  | 🟢 xdotool+/proc |  🟢 AppleScript  | Browser-only filtering with /proc fallback on headless Linux              |
+| **Code Signing Verification**  | 🟢 Authenticode | 🟢 ELF+dpkg/rpm  |   🟢 codesign    | Detects renamed AI executables via binary identity analysis               |
+| **Behavioral Port Scanning**   |    🟢 Native    |    🟢 Native     |    🟢 Native     | Cross-platform TCP port probing for AI runtimes                           |
+| **Tactical Screen Lock**       |   🟢 Fyne GUI   |   🟢 Fyne GUI    |   🟢 Fyne GUI    | Persistent fullscreen warning with 30s acknowledge countdown              |
+| **Tamper & Watchdog Protect**  |   🟢 Registry   |    🟢 systemd    |    🟢 launchd    | Auto-restarts agent via native service manager                            |
+| **Dynamic Config Sync**        |    🟢 Native    |    🟢 Native     |    🟢 Native     | Real-time interval updates from Dashboard                                 |
 
-*(Legend: 🟢 Fully Supported & Tested \| 🟡 Partial/WIP \| ❌ Planned for Future Release)*
+_(Legend: 🟢 Fully Supported & Tested \| 🟡 Partial/WIP \| ❌ Planned for Future Release)_
+
+<br/>
+
+<div align="center">
+  <img src="images/Agent-preview.png" alt="Agent Desktop GUI Preview" width="800" />
+</div>
 
 ### Firewall Rules (Security Groups)
 
 If deploying the Proctor Server to a cloud environment (e.g., AWS EC2, DigitalOcean), ensure your Cloud Firewall strictly follows these rules:
 
-| Port | Protocol | Service | Source IP Allowance |
-|---|---|---|---|
-| `80` / `443` | TCP | Nginx (Dashboard + API Proxy) | Contestant Subnets / 0.0.0.0 |
-| `8000` | TCP | FastAPI (REST API) | Internal / Nginx reverse proxy only |
-| `50052` | TCP | gRPC (Telemetry Stream) | Contestant Subnets / 0.0.0.0 |
-| `5173` | TCP | Vite Dev Server (Development ONLY) | **Control Operator/Admin IPs ONLY** |
-| `5432` | TCP | PostgreSQL | Internal Docker Network (`localhost` only) |
-| `6379` | TCP | Redis | Internal Docker Network (`localhost` only) |
+| Port         | Protocol | Service                            | Source IP Allowance                        |
+| ------------ | -------- | ---------------------------------- | ------------------------------------------ |
+| `80` / `443` | TCP      | Nginx (Dashboard + API Proxy)      | Contestant Subnets / 0.0.0.0               |
+| `8000`       | TCP      | FastAPI (REST API)                 | Internal / Nginx reverse proxy only        |
+| `50052`      | TCP      | gRPC (Telemetry Stream)            | Contestant Subnets / 0.0.0.0               |
+| `5173`       | TCP      | Vite Dev Server (Development ONLY) | **Control Operator/Admin IPs ONLY**        |
+| `5432`       | TCP      | PostgreSQL                         | Internal Docker Network (`localhost` only) |
+| `6379`       | TCP      | Redis                              | Internal Docker Network (`localhost` only) |
 
 > **Note:** In production, all traffic flows through Nginx on port 80/443. The Dashboard, API (`/api/`), WebSocket (`/ws/`), uploads (`/uploads/`), and static files (`/static/`) are all reverse-proxied through Nginx. Ports 8000 and 5173 should NOT be exposed externally.
 
 ## Quick Start
 
 ### Prerequisites
+
 Before running the system locally, ensure you have the following software installed on your Proctor/Development machine:
+
 - **Docker Desktop** (Required for PostgreSQL & Redis)
 - **Python 3.12+** (For the backend server)
 - **Node.js 18+ & npm** (For the React dashboard)
 - **Go 1.22+** (Required by `rebuild.ps1` to compile the agent binaries)
 
 ### Step 1: Initial Setup
+
 Clone the repository and install the required dependencies for the backend and frontend. You only need to do this once.
 
 ```powershell
@@ -262,6 +278,7 @@ cd ..
 ```
 
 ### Step 2: Environment Configuration
+
 Configure your environment secrets. **This is mandatory for security.**
 
 ```powershell
@@ -270,9 +287,10 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 ```
 
 Edit `server/.env` and set your credentials:
+
 ```ini
-# Database (use a strong, unique password)
-DATABASE_URL=postgresql+asyncpg://voight:<STRONG_PASSWORD>@localhost:5432/voight_db
+# Database (matches the default password in deploy/docker-compose.yml)
+DATABASE_URL=postgresql+asyncpg://voight:voight_secret@localhost:5432/voight_db
 
 # JWT (paste the generated secret here)
 JWT_SECRET_KEY=<YOUR_GENERATED_SECRET>
@@ -284,49 +302,68 @@ CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
 > **⚠️ Security:** The server will **refuse to start** in production mode if `JWT_SECRET_KEY` is still set to the default value. Always generate a unique secret before deploying.
 
 ### Step 3: Run the Startup Script
+
 Open PowerShell as Administrator in the project folder and run:
+
 ```powershell
 .\start-dev.ps1
 ```
-*This script will automatically compile Agents, start the Database (Docker), run Migrations, launch the Server/Dashboard, and open your web browser.*
+
+_This script will automatically compile Agents, start the Database (Docker), run Migrations, launch the Server/Dashboard, and open your web browser._
 
 ### Step 4: Accessing the Dashboard
+
 Once the services start, the Dashboard will open at `http://localhost:5173`.
-*Note: To access the dashboard from another machine on the same network, use `http://<YOUR_SERVER_IP>:5173`.*
+_Note: To access the dashboard from another machine on the same network, use `http://<YOUR_SERVER_IP>:5173`._
 
 - The system will detect it's a fresh installation and redirect you to the **INITIAL SETUP** page.
 - Enter your desired **Username** and **Password** to create the Admin/Proctor account.
 - Login and start monitoring!
 
 ### Step 5: Agent Download (For Contestants)
+
 Contestants can download the Agent directly from the Dashboard without needing to log in:
+
 1. Navigate to `http://<YOUR_SERVER_IP>:5173/download`
 2. Select the appropriate platform (Windows / Linux / macOS)
 3. Click **DOWNLOAD BUNDLE** - the ZIP is automatically packaged with the server's `competition_key` and IP address
 4. Extract, edit `config.json` to set `team_name`, and run with Administrator/root privileges
 
 ### Step 6: Building & Customizing the Agent (For Developers)
+
 If you modify the Go source code in the `agent/` directory or want to customize the Agent's `.exe` icon, you can recompile the binaries.
 
 1. **Customizing the Windows Icon:**
    To set a custom `.exe` icon for Windows, ensure you have `go-winres` installed:
+
    ```powershell
    go install github.com/tc-hib/go-winres@latest
    ```
+
    Replace `agent/winres/icon.png` with your custom logo (must be exactly 256x256), then run:
+
    ```powershell
    cd agent
    go-winres make
    Move-Item -Force rsrc_windows_amd64.syso cmd/voight/
    ```
+
    This generates the necessary `.syso` resource file for the Go compiler to embed the icon.
 
-2. **Automated Compilation & Packaging:**
-   Run the rebuild script from the root directory:
+2. **Automated Compilation & Packaging (via fyne-cross):**
+   Ensure you have Docker Desktop running (required by `fyne-cross` for Linux/macOS compilation) and install `fyne-cross`:
+
+   ```powershell
+   go install github.com/fyne-io/fyne-cross@latest
+   ```
+
+   Then run the rebuild script from the root directory:
+
    ```powershell
    .\rebuild.ps1
    ```
-   *(If `make` or the script fails, you can compile manually: `$env:GOOS="windows"; $env:GOARCH="amd64"; go build -ldflags="-s -w" -o bin/voight-sentinel.exe ./cmd/voight`)*
+
+   _(If `fyne-cross` fails, you can compile manually for Windows: `$env:GOOS="windows"; $env:GOARCH="amd64"; go build -ldflags="-s -w" -o bin/voight-sentinel.exe ./cmd/voight`)_
 
 3. **What the Script Does:**
    - Cleans up old binaries and ZIP bundles.
@@ -334,7 +371,7 @@ If you modify the Go source code in the `agent/` directory or want to customize 
    - Packages the executables alongside a clean `config.json` into distribution ZIPs.
    - Copies the final bundles directly into `dashboard/public/downloads/` where they are immediately served to users.
 
-*Note: The `.\start-dev.ps1` script automatically calls `rebuild.ps1` on startup, ensuring you are always testing the latest agent build.*
+_Note: The `.\start-dev.ps1` script automatically calls `rebuild.ps1` on startup, ensuring you are always testing the latest agent build._
 
 ## Production Deployment
 
@@ -344,37 +381,69 @@ For production environments, use the Docker Compose production configuration:
 # 1. Copy and configure production environment variables
 cd deploy
 copy .env.example .env
-# Edit .env with strong passwords and secrets
+# Edit .env — JWT_SECRET is MANDATORY (docker-compose will refuse to start without it)
 
-# 2. Deploy the full stack
+# 2. Generate mTLS certificates for Agent ↔ Server communication
+bash deploy/certs/generate-ca.sh
+bash deploy/certs/gen-agent-cert.sh contestant-01
+# Repeat gen-agent-cert.sh for each contestant
+
+# 3. Deploy the full stack
 docker compose -f docker-compose.prod.yml up -d
 ```
 
 The production stack includes:
+
 - **Nginx** reverse proxy (port 80) with security headers and gzip
-- **FastAPI** API server (4 Uvicorn workers)
+- **FastAPI** API server (4 Uvicorn workers) with **mTLS-enabled gRPC**
 - **Celery Worker** + **Celery Beat** for background tasks
 - **PostgreSQL + TimescaleDB** with resource limits
 - **Redis** with password authentication
 
 All services run with health checks and automatic restarts. The API server runs as a non-root user (`voight`) inside the container.
 
+> **⚠️ Security:** `JWT_SECRET` is now **mandatory** in production — Docker Compose will refuse to start if it is not set. mTLS is enabled by default in production (`GRPC_TLS_ENABLED=true`), requiring generated certificates.
+
+## Testing
+
+LOCKON VOIGHT includes an automated test suite covering the scoring engine and security layer:
+
+```powershell
+# Run all tests (75 tests)
+cd server
+python -m pytest ../tests/test_scoring_engine.py ../tests/test_security_api.py -v
+```
+
+| Test Suite         | Tests | Coverage                                                                                                                                               |
+| ------------------ | :---: | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Scoring Engine** |  61   | Score calculation, time decay, level boundaries, domain/process classification, dynamic policy, weight table integrity, memory forensics IoA, eBPF IoA |
+| **Security API**   |  27   | Password hashing, JWT creation/expiry/tampering, rate limiting, config security, IoA consistency                                                       |
+
+All tests are pure Python (no database required) and run in <5 seconds.
+
 ## Development & Contributing
 
 We welcome contributions to expand VOIGHT's detection capabilities:
+
 - **Backend (Python):** Follow `PEP-8` guidelines. Use `black` for formatting and `flake8` for linting.
 - **Agent (Go):** Use standard `gofmt`. Ensure all new OS-specific syscalls are separated using build tags (e.g., `_windows.go`, `_unix.go`).
 - **Dashboard (React):** Use `ESLint` and Prettier to maintain UI consistency.
 
+## Recently Completed
+
+- [x] **eBPF Integration (Linux):** Kernel-level monitoring via eBPF tracepoints (execve, connect, openat) for zero-overhead, tamper-proof telemetry. Requires Linux 5.15+ with BPF CO-RE.
+- [x] **Memory Forensics:** Deep RAM scanning of `/proc/<pid>/mem` to detect pre-loaded AI model tensors (GGUF, GGML, SafeTensors, PyTorch, ONNX) residing in process memory.
+- [x] **Agent GUI Interface:** Native graphical interface (Fyne) for the Sentinel Agent, providing contestants with a visible status panel showing connection health, enrollment status, and real-time heartbeat indicators.
+- [x] **Linux DNS Cache Profiling:** DNS cache extraction on Linux via `journalctl` / `systemd-resolved` with fallback domain probing.
+- [x] **Cross-Platform Screen Lock:** Tactical Screen Lock ported to Windows, macOS, and Linux using the native Fyne GUI engine.
+- [x] **macOS Complete Parity:** Full feature parity achieved — DNS cache (mDNSResponder), GPU (ioreg/IOAccelerator), Screen Lock (Fyne), Code Signing (`codesign`), and Watchdog (`launchd`).
+
 ## Future Roadmap
 
-- [ ] **eBPF Integration (Linux):** Shift process and network monitoring to the kernel level using eBPF for zero-overhead, tamper-proof telemetry.
-- [ ] **Memory Forensics:** Deep RAM scanning to detect pre-loaded model weights (e.g., GGML/GGUF tensors) residing in memory without active execution.
-- [ ] **Offline Payload Execution:** Allow the Agent to trigger the Tactical Screen Lock autonomously if a network isolation attack is detected for more than 30 seconds.
-- [ ] **Agent GUI Interface:** Build a native graphical interface for the Sentinel Agent, providing contestants with a visible system tray / status panel showing connection health, enrollment status, and real-time heartbeat indicators — replacing the current headless CLI-only operation.
-- [x] ~~**Linux DNS Cache Profiling:** DNS cache extraction on Linux via `journalctl` / `systemd-resolved` with fallback domain probing.~~
-- [x] ~~**Linux Screen Lock (X11/Wayland):** Tactical Screen Lock ported to Linux via `zenity` (GTK) with `xmessage` fallback.~~
-- [x] ~~**macOS Complete Parity:** Full feature parity achieved — DNS cache (mDNSResponder), GPU (ioreg/IOAccelerator), Screen Lock (AppleScript), Code Signing (`codesign`), and Watchdog (`launchd`).~~
+- [ ] **Automated Remediation:** Configurable policies to automatically terminate (`SIGKILL`) unauthorized AI processes when detected, reducing the manual burden on Proctors.
+- [ ] **Live Screen Broadcasting:** WebRTC integration to allow Proctors to view a live, low-framerate feed of a contestant's screen directly from the Fleet Command dashboard when an incident triggers.
+- [ ] **SIEM Integration:** Native webhooks and export capabilities to forward VOIGHT telemetry to Splunk, ElasticSearch, and Datadog for enterprise CTF environments.
+- [ ] **Offline Telemetry Caching:** If network connectivity drops, the Agent caches telemetry locally in an encrypted boltdb and replays it upon reconnection to prevent tamper evasion during outages.
 
 ## Frequently Asked Questions (FAQ)
 
@@ -384,18 +453,22 @@ We welcome contributions to expand VOIGHT's detection capabilities:
 **Q: Why not use commercial MDM (Mobile Device Management) or Game Anti-Cheats?**  
 **A:** MDMs lack the specific heuristics required to detect modern AI developer tools (e.g., local Ollama models, Cursor IDE extensions). Game Anti-Cheats are typically Ring-0 (kernel level), which is overly invasive and difficult to deploy safely in BYOD (Bring Your Own Device) environments.
 
-**Q: What happens if a contestant accidentally visits a blocked domain?**  
-**A:** The system does not immediately lock the screen. It accumulates an "IoA Score" (Indicator of Attack). The human Control Operator receives an alert on the Dashboard and makes the final decision on whether to issue a Tactical Screen Lock.
+**Q: What happens if a contestant accidentally visits a blocked domain or opens a restricted tool?**  
+**A:** The system calculates an IoA (Indicator of Attack) score. If a severe violation occurs, the Agent GUI displays a prominent 30-second warning countdown (grace period). The contestant must close the unauthorized tool immediately. If they fail to comply within the timeframe, a full-screen Tactical Screen Lock is enforced. The human Control Operator (Proctor) receives all alerts on the Dashboard and makes the final decision on disqualification.
 
 ## Acknowledgments
 
 This project stands on the shoulders of several incredible open-source projects:
 
 **Agent (Go):**
+
+- [**Fyne**](https://fyne.io/) for the cross-platform native GUI and screen lock interface.
+- [**fyne-cross**](https://github.com/fyne-io/fyne-cross) for seamless multi-OS Docker cross-compilation.
 - [**gopsutil**](https://github.com/shirou/gopsutil) for low-level OS metric collection.
 - [**go-winres**](https://github.com/tc-hib/go-winres) for embedding custom branding resources into Go binaries.
 
 **Server (Python):**
+
 - [**FastAPI**](https://fastapi.tiangolo.com/) for lightning-fast async backend routing.
 - [**SQLAlchemy**](https://www.sqlalchemy.org/) & [**Alembic**](https://alembic.sqlalchemy.org/) for async ORM and database migrations.
 - [**Celery**](https://docs.celeryq.dev/) for distributed background task processing.
@@ -404,6 +477,7 @@ This project stands on the shoulders of several incredible open-source projects:
 - [**Redis**](https://redis.io/) for Celery task brokering and high-speed caching.
 
 **Dashboard (React):**
+
 - [**React**](https://react.dev/) as the core UI framework.
 - [**Vite**](https://vite.dev/) for lightning-fast development builds and HMR.
 - [**Material UI (MUI)**](https://mui.com/) for the component library and tactical dark theme.
@@ -428,25 +502,34 @@ LOCKON-VOIGHT/
 ├── agent/                  # Go Agent (The Sentinel)
 │   ├── cmd/voight/         # Main entry point
 │   ├── cmd/watchdog/       # Watchdog binary
-│   ├── internal/           # Config, monitors, gRPC client, integrity
+│   ├── internal/           # Monitors, gRPC client, integrity
+│   │   ├── gui/            # Native Fyne Desktop App (Warnings & Lock Screen)
+│   │   └── ebpf/           # Linux kernel-level monitoring components
 │   └── winres/             # Windows resource branding (icon, manifest)
 ├── server/                 # FastAPI Server (The Core)
 │   ├── app/api/            # REST endpoints (auth, settings, policy, etc.)
 │   ├── app/core/           # Config, security, database
+│   ├── app/models/         # SQLAlchemy models (core, telemetry, auth)
 │   ├── app/scoring/        # IoA Scoring Engine
-│   ├── app/grpc/           # gRPC server (telemetry + enrollment)
+│   ├── app/grpc/           # gRPC server (telemetry + enrollment) with mTLS
 │   ├── app/tasks/          # Celery workers
 │   └── app/ws/             # WebSocket endpoints
 ├── dashboard/              # React Dashboard (The Oversight)
 │   ├── src/pages/          # Dashboard, Incidents, Fleet, Policy, etc.
 │   ├── src/services/       # API client, WebSocket hook
 │   └── nginx.conf          # Production reverse proxy config
+├── shared/                 # Shared detection rules (single source of truth)
+│   └── detection_rules.json # AI domains, processes, file extensions
+├── start-dev.ps1           # Master development script (run everything)
+└── rebuild.ps1             # Cross-platform compiler & packager (Windows/Linux/Mac)
 ├── proto/                  # Protobuf definitions
 ├── deploy/                 # Docker Compose (dev + prod) & scripts
+│   └── certs/              # mTLS certificate generation scripts
 ├── images/                 # System preview screenshots
-├── tests/                  # Load, detection, security tests
+├── tests/                  # Automated tests (scoring engine, security API)
 └── docs/                   # Documentation
 ```
+
 ## License
 
 This project is licensed under the **GNU General Public License v3.0 (GPLv3)**.  

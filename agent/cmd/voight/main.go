@@ -7,16 +7,19 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/lockon/voight-agent/internal/config"
+	"github.com/lockon/voight-agent/internal/ebpf"
 	"github.com/lockon/voight-agent/internal/enrollment"
+	"github.com/lockon/voight-agent/internal/gui"
 	"github.com/lockon/voight-agent/internal/grpcclient"
 	"github.com/lockon/voight-agent/internal/heartbeat"
 	"github.com/lockon/voight-agent/internal/integrity"
 	"github.com/lockon/voight-agent/internal/monitor"
-	"github.com/lockon/voight-agent/internal/privilege"
+	// "github.com/lockon/voight-agent/internal/privilege"
 	pb "github.com/lockon/voight-agent/proto/voight"
 )
 
@@ -48,16 +51,15 @@ func main() {
 
 	printBanner()
 
-	if !privilege.IsAdmin() {
-		log.Printf("VOIGHT Sentinel requires Administrator/Root privileges.")
-		log.Printf("Attempting to elevate privileges...")
-		err := privilege.Elevate()
-		if err != nil {
-			log.Fatalf("CRITICAL ERROR: Failed to elevate privileges (%v). Please run as Administrator/root.", err)
-		}
-		// The elevated process will start in a new window. We exit this one.
-		os.Exit(0)
-	}
+	// ─── Administrator Privilege Check ───────────────────
+	// if !privilege.IsAdmin() {
+	// 	log.Println("VOIGHT Sentinel requires Administrator/Root privileges.")
+	// 	log.Println("Attempting to elevate privileges...")
+	// 	if err := privilege.Elevate(); err != nil {
+	// 		log.Fatalf("Failed to elevate privileges: %v", err)
+	// 	}
+	// 	os.Exit(0) // Exit original process since elevated one was spawned
+	// }
 
 	// ─── Load Configuration ──────────────────────────────
 	cfg := config.DefaultConfig()
@@ -97,22 +99,35 @@ func main() {
 		cancel()
 	}()
 
+	// ─── Initialize gRPC Client ──────────────────────────
+	grpcClient := grpcclient.NewClient(cfg)
+
+	// ─── Initialize GUI ──────────────────────────────────
+	appGUI := gui.NewAppGUI(cfg, grpcClient, cancel)
+
+	// Start core processing in a background goroutine
+	go startAgentCore(ctx, cfg, grpcClient, appGUI)
+
+	// Run Fyne App on the Main Thread (Blocking)
+	appGUI.Run()
+
+	log.Println("VOIGHT Sentinel stopped.")
+}
+
+func startAgentCore(ctx context.Context, cfg *config.Config, grpcClient *grpcclient.Client, appGUI *gui.AppGUI) {
 	// ─── Initialize Integrity Checker ────────────────────
 	integrityChecker, err := integrity.NewChecker(func(expected, actual string) {
 		log.Printf("[Monitor] BINARY TAMPER DETECTED! Expected: %s, Got: %s", expected, actual)
-		// In production, this would immediately send a tamper alert to the server
 	})
 	if err != nil {
 		log.Printf("Warning: Could not initialize integrity checker: %v", err)
 	}
 
-	// ─── Initialize gRPC Client ──────────────────────────
-	grpcClient := grpcclient.NewClient(cfg)
-
 	if cfg.ServerAddress != "" {
 		if err := grpcClient.Connect(ctx); err != nil {
 			log.Printf("Warning: Could not connect to server: %v", err)
 			log.Println("Agent will run in offline mode and retry connection...")
+			appGUI.UpdateStatus(false, "")
 		}
 	}
 	defer grpcClient.Close()
@@ -122,8 +137,6 @@ func main() {
 		enrollMgr := enrollment.NewManager(cfg, func(
 			ctx context.Context, token string, fp enrollment.MachineFingerprint, ver, hash string,
 		) (*enrollment.EnrollmentResult, error) {
-			// Wire to actual gRPC enrollment call
-			// Send CompetitionKey::TeamName::ContestantName as the token
 			compoundToken := cfg.CompetitionKey + "::" + cfg.TeamName
 			if cfg.ContestantName != "" {
 				compoundToken += "::" + cfg.ContestantName
@@ -158,20 +171,19 @@ func main() {
 		if _, err := enrollMgr.Enroll(ctx, binaryHash); err != nil {
 			log.Printf("Enrollment failed: %v", err)
 			log.Println("Agent will continue without enrollment. Some features may be limited.")
+		} else {
+			appGUI.UpdateStatus(true, cfg.ContestantName)
 		}
+	} else if cfg.AgentID != "" {
+		appGUI.UpdateStatus(true, cfg.ContestantName)
 	}
 
 	// ─── Fetch Global Policy ─────────────────────────────
 	if cfg.ServerAddress != "" {
-		log.Printf("Fetching global detection policy from %s...", cfg.ServerAddress)
 		if err := cfg.FetchGlobalPolicy(); err != nil {
 			log.Printf("Warning: Failed to fetch global policy: %v (using local defaults)", err)
-		} else {
-			log.Printf("Successfully loaded global policy (%d domains, %d processes, %d extensions)", 
-				len(cfg.AIDomains), len(cfg.AIProcessNames), len(cfg.ModelFileExtensions))
 		}
 		
-		// Start background policy updater
 		go func() {
 			ticker := time.NewTicker(60 * time.Second)
 			defer ticker.Stop()
@@ -193,43 +205,60 @@ func main() {
 	log.Println("  Starting monitoring modules...")
 	log.Println("═══════════════════════════════════════════")
 
-	// Process Monitor (Task 2.1)
 	processMon := monitor.NewProcessMonitor(cfg, func(info monitor.ProcessInfo) {
-		log.Printf("[Monitor] AI Process Detected: %s (PID: %d, Category: %s)",
-			info.Name, info.PID, info.Category)
-		// Send to server via gRPC
+		log.Printf("[Monitor] AI Process Detected: %s (PID: %d, Category: %s)", info.Name, info.PID, info.Category)
 		grpcClient.SendProcessSnapshot(ctx, cfg.ContestantID, []monitor.ProcessInfo{info})
 	})
 	go processMon.Run(ctx)
 
 	networkMon := monitor.NewNetworkMonitor(cfg, func(event monitor.NetworkEvent) {
-		log.Printf("[Network] AI Connection: %s -> %s:%d (%s)",
-			event.DstDomain, event.DstIP, event.DstPort, event.Verdict)
+		log.Printf("[Network] AI Connection: %s -> %s:%d (%s)", event.DstDomain, event.DstIP, event.DstPort, event.Verdict)
 		grpcClient.SendNetworkEvent(ctx, cfg.ContestantID, event)
 	})
 	go networkMon.Run(ctx)
 
 	resourceMon := monitor.NewResourceMonitor(cfg, func(snapshot monitor.ResourceSnapshot, reason string) {
-		if reason != "" {
-			log.Printf("[Resource] Anomaly: %s", reason)
-		}
 		grpcClient.SendResourceSnapshot(ctx, cfg.ContestantID, snapshot)
 	})
 	go resourceMon.Run(ctx)
 
 	fileScanner := monitor.NewFileScanner(cfg, func(alert monitor.FileAlert) {
-		log.Printf("[FileScanner] Model File Detected: %s (%.1f MB, %s)",
-			alert.FileName, alert.FileSizeMB, alert.FileType)
 		grpcClient.SendFileAlert(ctx, cfg.ContestantID, alert)
 	})
 	go fileScanner.ScanOnce(ctx)
 
-	// Integrity Periodic Check (Task 2.5)
+	memScanner := monitor.NewMemoryScanner(cfg, func(finding monitor.MemoryFinding) {
+		grpcClient.SendMemoryFinding(ctx, cfg.ContestantID, finding)
+	})
+	if memScanner.IsAvailable() {
+		go memScanner.Run(ctx)
+	}
+
+	ebpfMon := ebpf.New(cfg,
+		func(pid int32, comm, filename string, ts time.Time) {
+			category := classifyBinaryPath(filename, cfg)
+			if category != "" {
+				grpcClient.SendEbpfAlert(ctx, cfg.ContestantID, "EXEC", comm, pid, filename, category)
+				if memScanner.IsAvailable() {
+					go memScanner.ScanProcess(ctx, pid)
+				}
+			}
+		},
+		func(pid int32, comm string, dstIP string, dstPort uint16, ts time.Time) {},
+		func(pid int32, comm, filename string, ts time.Time) {
+			if isModelFile(filename) {
+				grpcClient.SendEbpfAlert(ctx, cfg.ContestantID, "FILE_OPEN", comm, pid, filename, "MODEL_FILE")
+			}
+		},
+	)
+	if ebpfMon.IsAvailable() {
+		go ebpfMon.Run(ctx)
+	}
+
 	if integrityChecker != nil {
 		go integrityChecker.RunPeriodicCheck(ctx, 60*time.Second)
 	}
 
-	// Heartbeat (Task 2.5)
 	hbManager := heartbeat.NewManager(cfg, integrityChecker,
 		func(ctx context.Context, agentID, contestantID, version, binaryHash string) (int, bool, *pb.AgentConfig, error) {
 			return grpcClient.SendHeartbeat(ctx, agentID, contestantID, version, binaryHash)
@@ -244,20 +273,19 @@ func main() {
 				}
 			}
 		},
+		func(startCountdown bool) {
+			if startCountdown {
+				appGUI.StartWarningCountdown(30)
+			}
+		},
 	)
 	go hbManager.Run(ctx)
 
-	log.Println("═══════════════════════════════════════════")
 	log.Println("  All modules running. Monitoring active.")
-	log.Println("  Press Ctrl+C to stop.")
-	log.Println("═══════════════════════════════════════════")
-
-	// ─── Wait for Shutdown ───────────────────────────────
+	
 	<-ctx.Done()
-
-	log.Println("Shutting down gracefully...")
-	time.Sleep(500 * time.Millisecond) // Allow goroutines to clean up
-	log.Println("VOIGHT Sentinel stopped.")
+	log.Println("Shutting down core gracefully...")
+	time.Sleep(500 * time.Millisecond) 
 }
 
 // printBanner displays the agent startup banner.
@@ -306,3 +334,41 @@ func printBanner() {
 	fmt.Printf(banner, AppVersion)
 }
 
+// classifyBinaryPath checks if a binary path belongs to a known AI tool.
+// Returns the category ("AI_EDITOR", "LOCAL_LLM", "AI_AGENT") or "" if not AI-related.
+func classifyBinaryPath(path string, cfg *config.Config) string {
+	lower := strings.ToLower(path)
+
+	// Check against configured AI process names
+	for _, name := range cfg.AIProcessNames {
+		if strings.Contains(lower, strings.ToLower(name)) {
+			// Categorize based on known tool types
+			switch {
+			case strings.Contains(lower, "cursor") || strings.Contains(lower, "windsurf") ||
+				strings.Contains(lower, "aide") || strings.Contains(lower, "tabnine"):
+				return "AI_EDITOR"
+			case strings.Contains(lower, "ollama") || strings.Contains(lower, "lm-studio") ||
+				strings.Contains(lower, "llama") || strings.Contains(lower, "vllm"):
+				return "LOCAL_LLM"
+			case strings.Contains(lower, "autogpt") || strings.Contains(lower, "opendevin") ||
+				strings.Contains(lower, "aider"):
+				return "AI_AGENT"
+			default:
+				return "LOCAL_LLM" // Default AI classification
+			}
+		}
+	}
+	return ""
+}
+
+// isModelFile checks if a filename has a known AI model file extension.
+func isModelFile(filename string) bool {
+	lower := strings.ToLower(filename)
+	modelExts := []string{".gguf", ".ggml", ".safetensors", ".onnx", ".pth"}
+	for _, ext := range modelExts {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
+}

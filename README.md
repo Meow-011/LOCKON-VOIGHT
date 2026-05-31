@@ -262,7 +262,7 @@ If deploying the Proctor Server to a cloud environment (e.g., AWS EC2, DigitalOc
 Before running the system locally, ensure you have the following software installed on your Proctor/Development machine:
 
 - **Docker Desktop** (Required for PostgreSQL & Redis)
-- **Python 3.12+** (For the backend server)
+- **Python 3.12 (64-bit)** (Required for backend; newer versions like 3.14 may lack pre-compiled wheels)
 - **Node.js 18+ & npm** (For the React dashboard)
 - **Go 1.22+** (Required by `rebuild.ps1` to compile the agent binaries)
 
@@ -283,6 +283,19 @@ cd dashboard
 npm install
 cd ..
 ```
+
+> **Troubleshooting `pip install` errors on Windows:** 
+> If you encounter an error like `Failed building wheel for asyncpg` or `grpcio`, it means pip couldn't find a pre-compiled binary and failed trying to build from C++ source.
+> 
+> **Causes:**
+> 1. **You installed the 32-bit version of Python.** (Verify by running `python -c "import struct; print(struct.calcsize('P') * 8)"`).
+> 2. **Your Python version is too new** (e.g., Python 3.14), which doesn't have pre-compiled wheels yet.
+> 
+> **How to Fix:**
+> - **Uninstall your current Python version.**
+> - **Download and install [Python 3.12 (Windows installer 64-bit)](https://www.python.org/downloads/release/python-3120/).**
+> - Delete the old `venv` folder (`rm -r server\venv`) and recreate it.
+> - Run `pip install -r requirements.txt` again.
 
 ### Step 2: Environment Configuration
 

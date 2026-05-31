@@ -26,7 +26,6 @@ agent/github.com/
 agent/voight/
 agent/*.syso
 agent/fyne-cross/
-agent/internal/cache/
 agent/cocktail.gif
 
 # ── Node.js ──

@@ -6,6 +6,9 @@ on:
       - 'v*' # Trigger automatically when you push a tag like v2.1.4
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Agent for ${{ matrix.os }}

@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
+	"github.com/lockon/voight-agent/internal/cache"
 	"github.com/lockon/voight-agent/internal/config"
 	"github.com/lockon/voight-agent/internal/enrollment"
 	"github.com/lockon/voight-agent/internal/monitor"
@@ -27,16 +28,24 @@ import (
 // Client wraps the gRPC connection and provides high-level methods
 // for communicating with the VOIGHT server.
 type Client struct {
-	cfg      *config.Config
-	conn     *grpc.ClientConn
-	mu       sync.RWMutex
+	cfg       *config.Config
+	conn      *grpc.ClientConn
+	mu        sync.RWMutex
 	connected bool
+	cache     *cache.TelemetryCache
 }
 
 // NewClient creates a new gRPC client.
 func NewClient(cfg *config.Config) *Client {
+	// Initialize offline telemetry cache
+	tc := cache.New(".", cache.DefaultMaxSizeMB)
+	if err := tc.Open(); err != nil {
+		log.Printf("[gRPC] Warning: offline cache unavailable: %v", err)
+	}
+
 	return &Client{
-		cfg: cfg,
+		cfg:   cfg,
+		cache: tc,
 	}
 }
 
@@ -134,10 +143,10 @@ func (c *Client) GetConnection() *grpc.ClientConn {
 
 // ─── High-Level Methods ──────────────────────────────────────────
 
-// SendHeartbeat sends a heartbeat to the server and returns the suggested interval and whether a warning payload was triggered.
-func (c *Client) SendHeartbeat(ctx context.Context, agentID, contestantID, version, binaryHash string) (int, bool, *pb.AgentConfig, error) {
+// SendHeartbeat sends a heartbeat to the server and returns the suggested interval, whether a warning payload was triggered, and whether to force disconnect.
+func (c *Client) SendHeartbeat(ctx context.Context, agentID, contestantID, version, binaryHash string) (int, bool, bool, *pb.AgentConfig, error) {
 	if c.conn == nil {
-		return 0, false, nil, fmt.Errorf("gRPC connection not established")
+		return 0, false, false, nil, fmt.Errorf("gRPC connection not established")
 	}
 
 	client := pb.NewTelemetryServiceClient(c.conn)
@@ -150,7 +159,7 @@ func (c *Client) SendHeartbeat(ctx context.Context, agentID, contestantID, versi
 	})
 	
 	if err != nil {
-		return 0, false, nil, fmt.Errorf("heartbeat failed: %w", err)
+		return 0, false, false, nil, fmt.Errorf("heartbeat failed: %w", err)
 	}
 
 	// Only log warnings to avoid spamming the console and confusing users
@@ -159,7 +168,7 @@ func (c *Client) SendHeartbeat(ctx context.Context, agentID, contestantID, versi
 	}
 	// For normal successful heartbeats, we can either stay silent or log a simple 'OK'
 	// Silent is usually better for a background heartbeat every 10s.
-	return int(resp.HeartbeatIntervalSeconds), resp.DeployWarningPayload, resp.ConfigUpdate, nil
+	return int(resp.HeartbeatIntervalSeconds), resp.DeployWarningPayload, resp.ForceDisconnect, resp.ConfigUpdate, nil
 }
 
 // sendTelemetryReport is a helper to stream a single report and close the stream.
@@ -173,10 +182,52 @@ func (c *Client) sendTelemetryReport(ctx context.Context, report *pb.TelemetryRe
 		return err
 	}
 	if err := stream.Send(report); err != nil {
+		// Cache the report for later replay if send fails
+		if c.cache != nil {
+			if cacheErr := c.cache.Enqueue(report); cacheErr != nil {
+				log.Printf("[gRPC] Failed to cache report: %v", cacheErr)
+			}
+		}
 		return err
 	}
 	_, err = stream.CloseAndRecv()
 	return err
+}
+
+// ReplayCache replays all cached telemetry reports that were stored during
+// network outages. Should be called after a successful reconnection.
+func (c *Client) ReplayCache() {
+	if c.cache == nil || c.cache.Count() == 0 {
+		return
+	}
+
+	log.Printf("[gRPC] Replaying %d cached telemetry reports...", c.cache.Count())
+
+	replayed, err := c.cache.Replay(func(report *pb.TelemetryReport) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if c.conn == nil {
+			return fmt.Errorf("gRPC connection not established")
+		}
+		client := pb.NewTelemetryServiceClient(c.conn)
+		stream, err := client.StreamTelemetry(ctx)
+		if err != nil {
+			return err
+		}
+		if err := stream.Send(report); err != nil {
+			return err
+		}
+		_, err = stream.CloseAndRecv()
+		return err
+	})
+
+	if err != nil {
+		log.Printf("[gRPC] Cache replay ended with error: %v", err)
+	}
+	if replayed > 0 {
+		log.Printf("[gRPC] ✅ Replayed %d cached reports.", replayed)
+	}
 }
 
 // SendProcessSnapshot sends process monitoring data to the server.

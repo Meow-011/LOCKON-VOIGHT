@@ -16,6 +16,7 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 
 	"github.com/lockon/voight-agent/internal/config"
+	"github.com/lockon/voight-agent/internal/sysutil"
 )
 
 // ResourceSnapshot holds a point-in-time snapshot of system resources.
@@ -98,7 +99,7 @@ func (rm *ResourceMonitor) getGPUMetricsNvidia() (gpuPercent float64, vramMB flo
 	cmd := exec.Command("nvidia-smi",
 		"--query-gpu=utilization.gpu,memory.used",
 		"--format=csv,noheader,nounits")
-
+	sysutil.HideConsoleWindow(cmd)
 	output, err := cmd.Output()
 	if err != nil {
 		return 0, 0

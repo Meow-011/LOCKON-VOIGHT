@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -15,11 +18,13 @@ import (
 	"github.com/lockon/voight-agent/internal/ebpf"
 	"github.com/lockon/voight-agent/internal/enrollment"
 	"github.com/lockon/voight-agent/internal/gui"
+	"github.com/lockon/voight-agent/internal/gui/assets"
 	"github.com/lockon/voight-agent/internal/grpcclient"
 	"github.com/lockon/voight-agent/internal/heartbeat"
 	"github.com/lockon/voight-agent/internal/integrity"
 	"github.com/lockon/voight-agent/internal/monitor"
-	// "github.com/lockon/voight-agent/internal/privilege"
+	"github.com/lockon/voight-agent/internal/screen"
+	"github.com/lockon/voight-agent/internal/sysutil"
 	pb "github.com/lockon/voight-agent/proto/voight"
 )
 
@@ -28,10 +33,13 @@ import (
 
 const (
 	AppName    = "VOIGHT Sentinel"
-	AppVersion = "0.1.0"
+	AppVersion = "2.1.4"
 )
 
 func main() {
+	// Force dark theme for Fyne title bar
+	os.Setenv("FYNE_THEME", "dark")
+
 	// ─── Parse CLI Flags ─────────────────────────────────
 	configPath := flag.String("config", "config.json", "Path to agent config file (JSON)")
 	tokenFlag := flag.String("token", "", "Enrollment token (overrides config)")
@@ -44,6 +52,19 @@ func main() {
 		fmt.Printf("%s v%s\n", AppName, AppVersion)
 		os.Exit(0)
 	}
+
+	// ─── Single Instance Lock ────────────────────────────
+	// Bind to a local port to prevent multiple agents from running concurrently
+	listener, err := net.Listen("tcp", "127.0.0.1:40999")
+	if err != nil {
+		// Port is already in use, which means another instance is running
+		sysutil.ShowMessage("LOCKON VOIGHT Sentinel", "Agent is already running or loading!\n\nPlease check your system tray (bottom right) or wait a few seconds.")
+		os.Exit(0)
+	}
+	defer listener.Close()
+
+	// ─── Show Splash Screen ──────────────────────────────
+	closeSplash := sysutil.ShowHTASplash(assets.CocktailBytes)
 
 	// ─── Setup Logging ───────────────────────────────────
 	log.SetPrefix("[VOIGHT] ")
@@ -103,7 +124,9 @@ func main() {
 	grpcClient := grpcclient.NewClient(cfg)
 
 	// ─── Initialize GUI ──────────────────────────────────
+	os.Setenv("FYNE_THEME", "dark")
 	appGUI := gui.NewAppGUI(cfg, grpcClient, cancel)
+	appGUI.SetSplashCloser(closeSplash)
 
 	// Start core processing in a background goroutine
 	go startAgentCore(ctx, cfg, grpcClient, appGUI)
@@ -127,7 +150,7 @@ func startAgentCore(ctx context.Context, cfg *config.Config, grpcClient *grpccli
 		if err := grpcClient.Connect(ctx); err != nil {
 			log.Printf("Warning: Could not connect to server: %v", err)
 			log.Println("Agent will run in offline mode and retry connection...")
-			appGUI.UpdateStatus(false, "")
+			appGUI.UpdateStatus(false)
 		}
 	}
 	defer grpcClient.Close()
@@ -171,11 +194,14 @@ func startAgentCore(ctx context.Context, cfg *config.Config, grpcClient *grpccli
 		if _, err := enrollMgr.Enroll(ctx, binaryHash); err != nil {
 			log.Printf("Enrollment failed: %v", err)
 			log.Println("Agent will continue without enrollment. Some features may be limited.")
+			appGUI.UpdateStatus(false)
 		} else {
-			appGUI.UpdateStatus(true, cfg.ContestantName)
+			appGUI.UpdateStatus(true)
 		}
 	} else if cfg.AgentID != "" {
-		appGUI.UpdateStatus(true, cfg.ContestantName)
+		appGUI.UpdateStatus(true)
+	} else {
+		appGUI.UpdateStatus(false)
 	}
 
 	// ─── Fetch Global Policy ─────────────────────────────
@@ -260,7 +286,7 @@ func startAgentCore(ctx context.Context, cfg *config.Config, grpcClient *grpccli
 	}
 
 	hbManager := heartbeat.NewManager(cfg, integrityChecker,
-		func(ctx context.Context, agentID, contestantID, version, binaryHash string) (int, bool, *pb.AgentConfig, error) {
+		func(ctx context.Context, agentID, contestantID, version, binaryHash string) (int, bool, bool, *pb.AgentConfig, error) {
 			return grpcClient.SendHeartbeat(ctx, agentID, contestantID, version, binaryHash)
 		},
 		func(configUpdate *pb.AgentConfig) {
@@ -279,6 +305,30 @@ func startAgentCore(ctx context.Context, cfg *config.Config, grpcClient *grpccli
 			}
 		},
 	)
+	
+	screenBroadcaster := screen.NewBroadcaster()
+	screenBroadcaster.SetEnabled(true)
+	screenBroadcaster.StartBroadcasting(ctx, func(data []byte) error {
+		if cfg.ContestantID == "" {
+			return nil // Skip if not enrolled yet
+		}
+		url := fmt.Sprintf("http://%s:8000/api/screen/upload/%s", cfg.ServerAddress, cfg.ContestantID)
+		if cfg.UseTLS && cfg.ServerAddress != "localhost" && cfg.ServerAddress != "127.0.0.1" {
+			url = fmt.Sprintf("https://%s/api/screen/upload/%s", cfg.ServerAddress, cfg.ContestantID)
+		}
+		
+		client := &http.Client{Timeout: 3 * time.Second}
+		resp, err := client.Post(url, "image/jpeg", bytes.NewReader(data))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			return fmt.Errorf("bad status: %d", resp.StatusCode)
+		}
+		return nil
+	})
+
 	go hbManager.Run(ctx)
 
 	log.Println("  All modules running. Monitoring active.")

@@ -215,7 +215,7 @@ function AgentRow({ agent, selected, onSelect, setWarningTarget, setEditTarget, 
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ margin: 2, bgcolor: COLORS.bgDeep, p: 2, border: `1px solid ${COLORS.borderLight}` }}>
               <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <Typography variant="caption" sx={{ fontWeight: 800, color: COLORS.accent, display: 'block', mb: 0.5, fontFamily: 'monospace' }}>
                     AGENT VERSION:
                   </Typography>
@@ -223,7 +223,7 @@ function AgentRow({ agent, selected, onSelect, setWarningTarget, setEditTarget, 
                     {agent.version} {agent.version.includes('2.1.4') ? '' : '(OUTDATED)'}
                   </Typography>
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <Typography variant="caption" sx={{ fontWeight: 800, color: COLORS.accent, display: 'block', mb: 0.5, fontFamily: 'monospace' }}>
                     LAST SEEN EXACT:
                   </Typography>
@@ -558,8 +558,8 @@ export default function FleetCommandPage() {
           indicatorColor="primary"
           sx={{
             minHeight: 40,
-            '& .MuiTab-root': { minHeight: 40, fontFamily: 'monospace', fontWeight: 600, px: 3 },
-            '& .Mui-selected': { color: COLORS.accent },
+            '& .MuiTab-root': { minHeight: 40, fontFamily: 'monospace', fontWeight: 600, px: 3, color: COLORS.textMuted },
+            '& .Mui-selected': { color: `${COLORS.accent} !important` },
             '& .MuiTabs-indicator': { backgroundColor: COLORS.accent }
           }}
         >

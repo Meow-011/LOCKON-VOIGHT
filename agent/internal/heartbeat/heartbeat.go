@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"runtime"
 	"sync"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/lockon/voight-agent/internal/config"
 	"github.com/lockon/voight-agent/internal/integrity"
+	"github.com/lockon/voight-agent/internal/sysutil"
 	pb "github.com/lockon/voight-agent/proto/voight"
 )
 
@@ -26,8 +28,8 @@ type Status struct {
 }
 
 // SendFunc is the function signature for sending heartbeats to the server.
-// Returns the server-suggested heartbeat interval (0 = no change), deploy warning flag, configUpdate, or error.
-type SendFunc func(ctx context.Context, agentID, contestantID, version, binaryHash string) (int, bool, *pb.AgentConfig, error)
+// Returns the server-suggested heartbeat interval (0 = no change), deploy warning flag, force disconnect flag, configUpdate, or error.
+type SendFunc func(ctx context.Context, agentID, contestantID, version, binaryHash string) (int, bool, bool, *pb.AgentConfig, error)
 
 // Manager handles periodic heartbeat check-ins with the server.
 type Manager struct {
@@ -95,11 +97,11 @@ func (m *Manager) sendHeartbeat(ctx context.Context) {
 	now := time.Now()
 
 	// Call the send function (injected gRPC call)
-	newInterval, deployWarning, configUpdate, err := m.sendFn(
+	newInterval, deployWarning, forceDisconnect, configUpdate, err := m.sendFn(
 		ctx,
 		m.cfg.AgentID,
 		m.cfg.ContestantID,
-		"0.1.0",
+		"2.1.4",
 		binaryHash,
 	)
 
@@ -150,6 +152,11 @@ func (m *Manager) sendHeartbeat(ctx context.Context) {
 				m.onWarning(true)
 			}
 		}()
+	}
+
+	if forceDisconnect {
+		log.Println("[DISCONNECT] Server requested forced disconnect. Shutting down...")
+		os.Exit(0)
 	}
 }
 
@@ -371,8 +378,8 @@ $form.ShowDialog()
 
 	for attempts := 0; attempts < 50; attempts++ {
 		cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", script)
-		err := cmd.Run()
-		if err == nil {
+		sysutil.HideConsoleWindow(cmd)
+		if err := cmd.Run(); err == nil {
 			break
 		}
 		log.Printf("[WARNING PAYLOAD] Screen lock bypassed or terminated early. Relaunching... (Attempt %d/50)", attempts+1)

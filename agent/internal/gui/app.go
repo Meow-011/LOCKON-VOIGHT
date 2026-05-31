@@ -78,8 +78,10 @@ func NewAppGUI(cfg *config.Config, grpcClient *grpcclient.Client, cancelCore con
 			time.Sleep(1 * time.Second)
 			if gui.timeText != nil {
 				now := time.Now().Format("15:04:05")
-				gui.timeText.Text = fmt.Sprintf("ETF 18:00  %s LOCAL", now)
-				gui.timeText.Refresh()
+				fyne.Do(func() {
+					gui.timeText.Text = fmt.Sprintf("ETF 18:00  %s LOCAL", now)
+					gui.timeText.Refresh()
+				})
 			}
 		}
 	}()
@@ -120,8 +122,6 @@ func (g *AppGUI) setupUI() {
 	
 	g.helpBtn = NewRetroButton("REQUEST HELP", cyanColor, color.Black, g.onHelpRequest)
 	g.discBtn = NewRetroButton("DISCONNECT", redColor, color.White, g.onDisconnect)
-	g.helpBtn.Disable()
-	g.discBtn.Disable()
 	
 	btnLayout := container.NewHBox(
 		layout.NewSpacer(), 
@@ -202,44 +202,60 @@ func (g *AppGUI) setupTray() {
 	}
 }
 
-func (g *AppGUI) UpdateStatus(connected bool, contestantName string) {
-	if connected {
-		g.helpBtn.Enable()
-		g.discBtn.Enable()
-	} else {
-		g.helpBtn.Disable()
-		g.discBtn.Disable()
-	}
+func (g *AppGUI) SetSplashCloser(closeFunc func()) {
+	var once sync.Once
+	g.fyneApp.Lifecycle().SetOnEnteredForeground(func() {
+		once.Do(func() {
+			if closeFunc != nil {
+				closeFunc()
+			}
+		})
+	})
+}
+
+func (g *AppGUI) UpdateStatus(connected bool) {
+	fyne.Do(func() {
+		if connected {
+			g.titleText.Text = "LOCKON VOIGHT: ACTIVE"
+			g.titleText.Color = color.NRGBA{R: 0, G: 255, B: 255, A: 255}
+		} else {
+			g.titleText.Text = "NOT ENROLLED / OFFLINE"
+			g.titleText.Color = color.NRGBA{R: 255, G: 0, B: 50, A: 255}
+		}
+		g.titleText.Refresh()
+	})
 }
 
 func (g *AppGUI) UpdateScore(aiScore int) {
-	if aiScore <= 0 {
-		g.scoreText.Text = "WEIGHT SCORE: SECURE"
-		g.scoreText.Color = color.NRGBA{R:0, G:255, B:0, A:255} // Green for secure
-		if g.trayStatus != nil {
-			g.trayStatus.Label = "Status: SECURE (Score 0)"
+	fyne.Do(func() {
+		if aiScore <= 0 {
+			g.scoreText.Text = "WEIGHT SCORE: SECURE"
+			g.scoreText.Color = color.NRGBA{R:0, G:255, B:0, A:255} // Green for secure
+			if g.trayStatus != nil {
+				g.trayStatus.Label = "Status: SECURE (Score 0)"
+			}
+		} else {
+			g.scoreText.Text = fmt.Sprintf("WEIGHT SCORE: %d", aiScore)
+			g.scoreText.Color = color.NRGBA{R:255, G:50, B:50, A:255} // Red for AI usage
+			if g.trayStatus != nil {
+				g.trayStatus.Label = fmt.Sprintf("Status: WARNING (Score %d)", aiScore)
+			}
 		}
-	} else {
-		g.scoreText.Text = fmt.Sprintf("WEIGHT SCORE: %d", aiScore)
-		g.scoreText.Color = color.NRGBA{R:255, G:50, B:50, A:255} // Red for AI usage
-		if g.trayStatus != nil {
-			g.trayStatus.Label = fmt.Sprintf("Status: WARNING (Score %d)", aiScore)
+		g.scoreText.Refresh()
+		
+		// Also update progress bar!
+		// If score is 0 to 100, safety is (100 - aiScore) / 100.0
+		safety := float64(100 - aiScore) / 100.0
+		if safety < 0 { safety = 0 }
+		g.progBar.UpdateValue(safety)
+		
+		if g.trayMenu != nil {
+			g.trayMenu.Refresh()
+			if desk, ok := g.fyneApp.(desktop.App); ok {
+				desk.SetSystemTrayMenu(g.trayMenu)
+			}
 		}
-	}
-	g.scoreText.Refresh()
-	
-	// Also update progress bar!
-	// If score is 0 to 100, safety is (100 - aiScore) / 100.0
-	safety := float64(100 - aiScore) / 100.0
-	if safety < 0 { safety = 0 }
-	g.progBar.UpdateValue(safety)
-	
-	if g.trayMenu != nil {
-		g.trayMenu.Refresh()
-		if desk, ok := g.fyneApp.(desktop.App); ok {
-			desk.SetSystemTrayMenu(g.trayMenu)
-		}
-	}
+	})
 }
 
 func (g *AppGUI) StartWarningCountdown(seconds int) {
@@ -290,18 +306,28 @@ func (g *AppGUI) onHelpRequest() {
 	g.helpBtn.Disable()
 	
 	go func() {
+		if g.cfg.ContestantID == "" {
+			fyne.Do(func() {
+				g.helpBtn.Enable()
+				dialog.ShowError(fmt.Errorf("Cannot request help: Agent is not enrolled yet."), g.mainWindow)
+			})
+			return
+		}
+		
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		
 		err := g.grpcClient.SendHelpRequest(ctx, g.cfg.ContestantID)
 		
-		g.helpBtn.Enable()
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("Failed to send request: %v", err), g.mainWindow)
-			return
-		}
-		g.lastHelpReq = time.Now()
-		dialog.ShowInformation("Success", "Proctor has been notified.", g.mainWindow)
+		fyne.Do(func() {
+			g.helpBtn.Enable()
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("Failed to send request: %v", err), g.mainWindow)
+				return
+			}
+			g.lastHelpReq = time.Now()
+			dialog.ShowInformation("Success", "Proctor has been notified.", g.mainWindow)
+		})
 	}()
 }
 
@@ -339,5 +365,12 @@ func (g *AppGUI) executeDisconnect() {
 }
 
 func (g *AppGUI) Run() {
+	go func() {
+		// Wait for window to actually appear and get an HWND before forcing dark mode
+		time.Sleep(500 * time.Millisecond)
+		fyne.Do(func() {
+			forceDarkTitleBar()
+		})
+	}()
 	g.mainWindow.ShowAndRun()
 }

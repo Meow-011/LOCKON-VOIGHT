@@ -79,6 +79,7 @@ class CompetitionResponse(BaseModel):
     description: Optional[str]
     banner: Optional[str]
     status: str
+    join_code: Optional[str]
     start_time: Optional[datetime]
     end_time: Optional[datetime]
     created_at: datetime

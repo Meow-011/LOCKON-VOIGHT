@@ -62,6 +62,7 @@ export const authAPI = {
 export const settingsAPI = {
   get: () => api.get('/settings/'),
   update: (data) => api.post('/settings/', data),
+  testWebhook: (webhookUrl, webhookFormat, webhookToken) => api.post('/settings/test-webhook', { webhookUrl, webhookFormat, webhookToken }),
   uploadDashboardBanner: (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -105,6 +106,7 @@ export const contestantsAPI = {
   getResources: (id) => api.get(`/contestants/${id}/resources`),
   getActivity: (id) => api.get(`/contestants/${id}/activity`),
   sendWarning: (id) => api.post(`/contestants/${id}/warning`),
+  disconnect: (id) => api.post(`/contestants/${id}/disconnect`),
 };
 
 // ──────── Incidents ────────

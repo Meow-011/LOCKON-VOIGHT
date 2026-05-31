@@ -19,12 +19,15 @@ agent/bundle/
 agent/*.exe
 agent/voight-sentinel-*
 agent/temp_zip_test/
+agent/test_extract/
 agent/test.zip
 agent/test_win.go
 agent/github.com/
 agent/voight/
 agent/*.syso
 agent/fyne-cross/
+agent/internal/cache/
+agent/cocktail.gif
 
 # ── Node.js ──
 node_modules/
@@ -77,9 +80,10 @@ protoc.zip
 dashboard/public/downloads/*.zip
 
 # ── Scratch / one-off test scripts ──
-test.go
-test_*.py
-details.txt
+/test.go
+/test_*.py
+/server/test_*.py
+/details.txt
 
 # ── Dependencies / Compilers ──
 gcc.zip

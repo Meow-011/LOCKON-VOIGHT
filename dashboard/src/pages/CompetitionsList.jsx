@@ -256,12 +256,26 @@ export default function CompetitionsList() {
                       color: isHovered ? COLORS.textPrimary : COLORS.textMuted,
                       textTransform: 'uppercase',
                       letterSpacing: '0.05em',
-                      transition: 'color 0.2s'
+                      transition: 'color 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5
                     }}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: statusCfg.color, boxShadow: `0 0 8px ${statusCfg.color}` }} />
                       {comp.name}
                     </Typography>
                     {comp.ai_flags > 0 && (
                       <Box sx={{ width: 8, height: 8, bgcolor: COLORS.red, borderRadius: 0, boxShadow: `0 0 10px ${COLORS.red}` }} />
+                    )}
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 3, mt: 1.5, pl: 2.5 }}>
+                    <Typography variant="caption" sx={{ color: COLORS.textMuted, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Users size={12} /> {comp.contestant_count || 0} ENROLLED
+                    </Typography>
+                    {comp.start_time && (
+                      <Typography variant="caption" sx={{ color: COLORS.textMuted, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Activity size={12} /> {new Date(comp.start_time).toLocaleDateString()}
+                      </Typography>
                     )}
                   </Box>
                 </Box>
@@ -318,12 +332,34 @@ export default function CompetitionsList() {
                       <Typography variant="caption" sx={{ fontFamily: 'monospace', color: COLORS.textMuted, letterSpacing: '0.1em' }}>
                         SYS.ID: {activeComp.id.toUpperCase()}
                       </Typography>
+                      {activeComp.join_code && (
+                        <Chip
+                          label={`JOIN CODE: ${activeComp.join_code}`}
+                          size="small"
+                          sx={{
+                            bgcolor: alpha(COLORS.accent, 0.1),
+                            border: `1px solid ${COLORS.accent}`,
+                            color: COLORS.accent,
+                            fontWeight: 800,
+                            fontFamily: 'monospace',
+                            borderRadius: 0,
+                            ml: 2
+                          }}
+                        />
+                      )}
                       <TimerDisplay startTime={activeComp.start_time} status={activeComp.status} />
                     </Box>
 
-                    <Typography variant="h3" sx={{ fontWeight: 900, mb: 3, textTransform: 'uppercase', lineHeight: 1.1 }}>
+                    <Typography variant="h3" sx={{ fontWeight: 900, mb: 1, textTransform: 'uppercase', lineHeight: 1.1 }}>
                       {activeComp.name}
                     </Typography>
+                    {(activeComp.start_time || activeComp.end_time) && (
+                      <Typography variant="body2" sx={{ color: COLORS.textMuted, fontFamily: 'monospace', mb: 3 }}>
+                        {activeComp.start_time ? new Date(activeComp.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase() : 'TBD'} 
+                        {' - '} 
+                        {activeComp.end_time ? new Date(activeComp.end_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase() : 'TBD'}
+                      </Typography>
+                    )}
 
                     <Typography variant="body1" sx={{ color: COLORS.textSecondary, mb: 6, fontSize: '1.1rem', lineHeight: 1.6, maxWidth: '90%' }}>
                       {activeComp.description || 'No description available. Get hacking!'}
@@ -331,21 +367,22 @@ export default function CompetitionsList() {
 
                     <Divider sx={{ borderColor: COLORS.borderLight, mb: 4 }} />
 
-                    <Box sx={{ display: 'flex', gap: 6, mb: 'auto' }}>
-                      <Box>
-                        <Typography variant="caption" sx={{ color: COLORS.textMuted, fontFamily: 'monospace', mb: 1, display: 'block' }}>TOTAL ENROLLMENT</Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                          <Users size={24} color={COLORS.textPrimary} />
-                          <Typography variant="h4" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{activeComp.contestant_count || 0}</Typography>
+                    <Box sx={{ display: 'flex', gap: 3, mb: 'auto' }}>
+                      <Box sx={{ flex: 1, bgcolor: alpha(COLORS.bgSurface, 0.5), border: `1px solid ${COLORS.border}`, p: 3, display: 'flex', flexDirection: 'column' }}>
+                        <Typography variant="caption" sx={{ color: COLORS.textMuted, fontFamily: 'monospace', mb: 2, display: 'block' }}>TOTAL ENROLLMENT</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 'auto' }}>
+                          <Users size={28} color={COLORS.textPrimary} />
+                          <Typography variant="h3" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>{activeComp.contestant_count || 0}</Typography>
                         </Box>
                       </Box>
-                      <Box>
-                        <Typography variant="caption" sx={{ color: COLORS.textMuted, fontFamily: 'monospace', mb: 1, display: 'block' }}>SUSPICIOUS AI ACTIVITY</Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                          <AlertTriangle size={24} color={activeComp.ai_flags > 0 ? COLORS.red : COLORS.textMuted} />
-                          <Typography variant="h4" sx={{ fontWeight: 800, fontFamily: 'monospace', color: activeComp.ai_flags > 0 ? COLORS.red : COLORS.textPrimary }}>
-                            {activeComp.ai_flags || 0} FLAGS
+                      <Box sx={{ flex: 1, bgcolor: activeComp.ai_flags > 0 ? alpha(COLORS.red, 0.05) : alpha(COLORS.bgSurface, 0.5), border: `1px solid ${activeComp.ai_flags > 0 ? alpha(COLORS.red, 0.3) : COLORS.border}`, p: 3, display: 'flex', flexDirection: 'column' }}>
+                        <Typography variant="caption" sx={{ color: COLORS.textMuted, fontFamily: 'monospace', mb: 2, display: 'block' }}>SUSPICIOUS AI ACTIVITY</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 'auto' }}>
+                          <AlertTriangle size={28} color={activeComp.ai_flags > 0 ? COLORS.red : COLORS.textMuted} />
+                          <Typography variant="h3" sx={{ fontWeight: 800, fontFamily: 'monospace', color: activeComp.ai_flags > 0 ? COLORS.red : COLORS.textPrimary }}>
+                            {activeComp.ai_flags || 0}
                           </Typography>
+                          <Typography variant="body2" sx={{ color: activeComp.ai_flags > 0 ? COLORS.red : COLORS.textMuted, fontWeight: 800, mt: 1 }}>FLAGS</Typography>
                         </Box>
                       </Box>
                     </Box>
@@ -483,7 +520,7 @@ export default function CompetitionsList() {
             <Typography variant="overline" sx={{ color: COLORS.textMuted }}>Select Banner Image</Typography>
             <Grid container spacing={2} sx={{ mt: 0.5 }}>
               {PREDEFINED_BANNERS.map((banner, idx) => (
-                <Grid item xs={3} key={idx}>
+                <Grid size={{ xs: 3 }} key={idx}>
                   <Box
                     onClick={() => setNewComp({ ...newComp, banner: banner.url })}
                     sx={{
@@ -516,7 +553,7 @@ export default function CompetitionsList() {
                 </Grid>
               ))}
               
-              <Grid item xs={3}>
+              <Grid size={{ xs: 3 }}>
                 <Box
                   component="label"
                   sx={{

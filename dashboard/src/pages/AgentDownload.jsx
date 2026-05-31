@@ -21,9 +21,9 @@ const COLORS = {
 };
 
 const PLATFORMS = [
-  { key: 'windows', label: 'Windows', icon: '/Icons/Windows.svg', file: 'voight-sentinel-windows-bundle.zip', size: '~14 MB', color: '#3b82f6' },
-  { key: 'linux', label: 'Linux', icon: '/Icons/Linux.svg', file: 'voight-sentinel-linux-bundle.zip', size: '~5 MB', color: '#f97316' },
-  { key: 'macos', label: 'macOS', icon: '/Icons/Apple.svg', file: 'voight-sentinel-darwin-bundle.zip', size: '~5 MB', color: '#d946ef' },
+  { key: 'windows', label: 'Windows', icon: '/Icons/Windows.svg', file: 'voight-sentinel-windows-bundle.zip', size: '30.6 MB', color: '#3b82f6' },
+  { key: 'linux', label: 'Linux', icon: '/Icons/Linux.svg', file: 'voight-sentinel-linux-bundle.zip', size: '34.5 MB', color: '#f97316' },
+  { key: 'macos', label: 'macOS', icon: '/Icons/Apple.svg', file: 'voight-sentinel-darwin-bundle.zip', size: '961 B', color: '#d946ef' },
 ];
 
 
@@ -144,20 +144,8 @@ function TelemetryItem({ title, description, icon, payload }) {
   );
 }
 
-function StepItem({ s, isLast }) {
+function StepItem({ s, isLast, compKey }) {
   const [showConfig, setShowConfig] = useState(false);
-  const [compKey, setCompKey] = useState("GLOBAL_COMP_KEY_12345");
-
-  useEffect(() => {
-    // Fetch public config from API (no auth required)
-    axios.get('/api/settings/public')
-      .then(res => {
-        if (res.data && res.data.competitionKey) {
-          setCompKey(res.data.competitionKey);
-        }
-      })
-      .catch(err => console.error(err));
-  }, []);
 
   return (
     <Box sx={{ p: 2.5, borderBottom: isLast ? 'none' : `1px solid ${COLORS.border}`, '&:hover': { bgcolor: alpha(COLORS.accent, 0.03) } }}>
@@ -212,6 +200,19 @@ export default function AgentDownloadPage() {
   const [downloading, setDownloading] = useState(false);
   const [downloadComplete, setDownloadComplete] = useState(false);
   const [activeTab, setActiveTab] = useState('download');
+  const [activeCompetitions, setActiveCompetitions] = useState([]);
+  const [selectedCompId, setSelectedCompId] = useState(null);
+
+  useEffect(() => {
+    axios.get('/api/competitions/active')
+      .then(res => {
+        if (res.data && res.data.length > 0) {
+          setActiveCompetitions(res.data);
+          setSelectedCompId(res.data[0].id);
+        }
+      })
+      .catch(err => console.error("Failed to fetch active competitions", err));
+  }, []);
 
   const platform = PLATFORMS.find(p => p.key === selectedPlatform);
   const steps = STEPS[selectedPlatform];
@@ -221,16 +222,8 @@ export default function AgentDownloadPage() {
     setDownloadComplete(false);
 
     try {
-      // Fetch the actual key from backend
-      let compKey = "GLOBAL_COMP_KEY_12345";
-      try {
-        const res = await axios.get('/api/settings/public');
-        if (res.data && res.data.competitionKey) {
-          compKey = res.data.competitionKey;
-        }
-      } catch (err) {
-        console.error("Failed to fetch settings from backend", err);
-      }
+      const selectedComp = activeCompetitions.find(c => c.id === selectedCompId);
+      let compKey = selectedComp ? selectedComp.join_code : "DEFAULT_COMP_KEY_123";
 
       // Fetch the static ZIP template
       const response = await fetch(`/downloads/${platform.file}`);
@@ -333,6 +326,40 @@ export default function AgentDownloadPage() {
 
         {activeTab === 'download' && (
           <Box sx={{ width: '100%', maxWidth: 700, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            
+            {/* Active Competitions Selection */}
+            {activeCompetitions.length > 0 && (
+              <Box sx={{ width: '100%', mb: 4 }}>
+                <Typography variant="overline" sx={{ color: COLORS.textMuted, mb: 1, display: 'block', textAlign: 'center' }}>
+                  SELECT COMPETITION
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {activeCompetitions.map(comp => (
+                    <Chip
+                      key={comp.id}
+                      label={comp.name}
+                      onClick={() => setSelectedCompId(comp.id)}
+                      sx={{
+                        bgcolor: selectedCompId === comp.id ? alpha(COLORS.accent, 0.2) : 'transparent',
+                        color: selectedCompId === comp.id ? COLORS.accent : COLORS.textMuted,
+                        border: `1px solid ${selectedCompId === comp.id ? COLORS.accent : COLORS.borderLight}`,
+                        borderRadius: 0,
+                        px: 1,
+                        py: 2,
+                        fontWeight: 800,
+                        fontFamily: 'monospace',
+                        transition: 'all 0.2s',
+                        '&:hover': {
+                          bgcolor: selectedCompId === comp.id ? alpha(COLORS.accent, 0.3) : alpha(COLORS.accent, 0.05),
+                          borderColor: COLORS.accent
+                        }
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
             {/* Warning Box */}
             <Alert
               severity="warning"

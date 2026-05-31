@@ -34,7 +34,7 @@ $env:GOARCH="amd64"
 $env:CGO_ENABLED="1"
 $env:CC="gcc"
 $env:PATH = "C:\Users\natth\OneDrive\Desktop\MyProject\LOCKON-VOIGHT\gcc_out\mingw64\bin;" + $env:PATH
-go build -ldflags="-s -w" -o bin/voight-sentinel.exe ./cmd/voight
+go build -ldflags="-H=windowsgui -s -w" -o bin/voight-sentinel.exe ./cmd/voight
 
 # Create Windows Bundle
 Copy-Item "bin/voight-sentinel.exe" "bundle\windows\"

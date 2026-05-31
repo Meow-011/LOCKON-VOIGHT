@@ -23,6 +23,7 @@ class TelemetryService:
     """Processes incoming telemetry data from agents."""
     
     pending_warnings: Dict[str, bool] = {}
+    pending_disconnects: Dict[str, bool] = {}
 
     @classmethod
     def queue_warning(cls, contestant_id: str):
@@ -33,6 +34,18 @@ class TelemetryService:
         cid = str(contestant_id)
         if cls.pending_warnings.get(cid):
             cls.pending_warnings[cid] = False
+            return True
+        return False
+
+    @classmethod
+    def queue_disconnect(cls, contestant_id: str):
+        cls.pending_disconnects[str(contestant_id)] = True
+
+    @classmethod
+    def consume_disconnect(cls, contestant_id: str) -> bool:
+        cid = str(contestant_id)
+        if cls.pending_disconnects.get(cid):
+            cls.pending_disconnects[cid] = False
             return True
         return False
 

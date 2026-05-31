@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lockon/voight-agent/internal/sysutil"
 )
 
 // ──────────────────────────────────────────────
@@ -271,7 +273,9 @@ func (ps *PortScanner) discoverARPHosts() []string {
 	switch runtime.GOOS {
 	case "windows":
 		// Windows: arp -a
-		out, err := exec.Command("arp", "-a").Output()
+		cmd := exec.Command("arp", "-a")
+		sysutil.HideConsoleWindow(cmd)
+		out, err := cmd.Output()
 		if err != nil {
 			return ips
 		}
@@ -291,7 +295,9 @@ func (ps *PortScanner) discoverARPHosts() []string {
 		// Linux: ip neigh (preferred) or arp -a
 		out, err := exec.Command("ip", "neigh").Output()
 		if err != nil {
-			out, err = exec.Command("arp", "-a").Output()
+			cmd := exec.Command("arp", "-a")
+			sysutil.HideConsoleWindow(cmd)
+			out, err = cmd.Output()
 			if err != nil {
 				return ips
 			}
@@ -309,7 +315,9 @@ func (ps *PortScanner) discoverARPHosts() []string {
 
 	case "darwin":
 		// macOS: arp -a
-		out, err := exec.Command("arp", "-a").Output()
+		cmd := exec.Command("arp", "-a")
+		sysutil.HideConsoleWindow(cmd)
+		out, err := cmd.Output()
 		if err != nil {
 			return ips
 		}

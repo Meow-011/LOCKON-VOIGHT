@@ -3,6 +3,7 @@ Competition & Contestant service layer — business logic for CRUD operations.
 """
 
 import secrets
+import string
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -20,10 +21,16 @@ class CompetitionService:
     @staticmethod
     async def create(db: AsyncSession, name: str, description: str = None, banner: str = None,
                      start_time: datetime = None, end_time: datetime = None) -> Competition:
+        
+        # Generate an 8-character alphanumeric join code
+        alphabet = string.ascii_uppercase + string.digits
+        join_code = ''.join(secrets.choice(alphabet) for _ in range(8))
+        
         comp = Competition(
             name=name,
             description=description,
             banner=banner,
+            join_code=join_code,
             status="draft",
             start_time=start_time,
             end_time=end_time,
@@ -182,33 +189,21 @@ class ContestantService:
             team_name = parts[1].strip().upper()
             contestant_name = parts[2].strip().upper() if len(parts) > 2 else team_name
 
-            # Validate Global Competition Key!
-            from app.api.settings import load_settings
-            settings = load_settings()
-            if comp_key != settings.get("competitionKey", "GLOBAL_COMP_KEY_12345"):
-                return None  # Invalid global key, reject enrollment
-
-            # Find the active competition
+            # Validate Join Code!
             from app.models import Competition
             comp_result = await db.execute(
                 select(Competition)
-                .where(Competition.status == "active")
-                .order_by(Competition.created_at.desc())
+                .where(Competition.join_code == comp_key)
                 .limit(1)
             )
             comp = comp_result.scalar_one_or_none()
             
-            # If no active competition, fallback to latest draft/any
-            if not comp:
-                comp_result = await db.execute(
-                    select(Competition).order_by(Competition.created_at.desc()).limit(1)
-                )
-                comp = comp_result.scalar_one_or_none()
+            if not comp or comp.status != "active":
+                return None  # Invalid join code or competition not active
                 
-            # If still absolutely no competition, create a default one
-            if not comp:
-                comp = await CompetitionService.create(db, name="Default Competition")
-            
+            # Check if contestant already exists by handle and team
+                
+
             # Check if contestant already exists by handle and team
             cont_result = await db.execute(
                 select(Contestant).where(

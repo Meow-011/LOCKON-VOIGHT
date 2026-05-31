@@ -14,11 +14,40 @@ from app.core.config import settings
 from app.core.database import async_session_factory
 from app.services.telemetry import TelemetryService, IncidentService
 from app.services.competition import ContestantService
+from app.services.siem import siem_exporter
 from app.scoring.engine import scoring_engine
 
 from voight import telemetry_pb2, enrollment_pb2
 
 logger = logging.getLogger(__name__)
+
+
+# ─── SIEM Webhook Helper ──────────────────────────────────────
+
+async def _fire_webhook_if_enabled(contestant_id, ioa_type, evidence, score_delta=0, total_score=0, severity="MEDIUM"):
+    """Fire a SIEM webhook alert if webhooks are enabled in settings."""
+    try:
+        import json, os
+        if os.path.exists("settings.json"):
+            with open("settings.json", "r") as f:
+                settings_data = json.load(f)
+            if settings_data.get("webhookEnabled"):
+                await siem_exporter.send_alert(
+                    webhook_url=settings_data.get("webhook", ""),
+                    webhook_format=settings_data.get("webhookFormat", "generic"),
+                    webhook_token=settings_data.get("webhookToken", None),
+                    incident_data={
+                        "severity": severity,
+                        "contestant_id": str(contestant_id),
+                        "ioa_type": ioa_type,
+                        "score_delta": score_delta,
+                        "total_score": total_score,
+                        "evidence": evidence,
+                        "details": f"IoA detected: {ioa_type}",
+                    },
+                )
+    except Exception as e:
+        logger.debug(f"[SIEM] Webhook fire skipped: {e}")
 
 
 class TelemetryServicer:
@@ -110,8 +139,9 @@ class TelemetryServicer:
                 # Periodically recalculate score to apply time decay for OPEN incidents
                 await IncidentService.recalculate_score(db, contestant_id)
                 
-                # Consume any pending warning payload
-                deploy_warning = TelemetryService.consume_warning(contestant_id)
+                # Check for queued payloads
+                deploy_warning = TelemetryService.consume_warning(request.contestant_id)
+                force_disconnect = TelemetryService.consume_disconnect(request.contestant_id)
                 
                 # Send dynamic policy to agent
                 from sqlalchemy import select
@@ -134,6 +164,7 @@ class TelemetryServicer:
                 acknowledged=True,
                 heartbeat_interval_seconds=settings.AGENT_HEARTBEAT_INTERVAL_SECONDS,
                 deploy_warning_payload=deploy_warning,
+                force_disconnect=force_disconnect,
                 config_update=config_update,
             )
 
@@ -150,10 +181,8 @@ class TelemetryServicer:
                 await IncidentService.create_incident(
                     db,
                     contestant_id,
-                    ioa_type="HELP_REQUEST",
-                    severity="INFO",
-                    details=f"Contestant requested help via Agent GUI",
-                    raw_data={}
+                    indicator_type="HELP_REQUEST",
+                    evidence=f"Contestant requested help via Agent GUI",
                 )
             logger.info(f"Help request received from contestant {contestant_id}")
             return telemetry_pb2.HelpResponse(
@@ -173,10 +202,8 @@ class TelemetryServicer:
                 await IncidentService.create_incident(
                     db,
                     contestant_id,
-                    ioa_type="INTENTIONAL_DISCONNECT",
-                    severity="CRITICAL",
-                    details=f"Contestant intentionally disconnected the agent via GUI",
-                    raw_data={}
+                    indicator_type="INTENTIONAL_DISCONNECT",
+                    evidence=f"Contestant intentionally disconnected the agent via GUI",
                 )
             logger.warning(f"Intentional disconnect received from contestant {contestant_id}")
             return telemetry_pb2.DisconnectResponse(acknowledged=True)
@@ -207,6 +234,11 @@ class TelemetryServicer:
                     db, contestant_id, ioa_type,
                     evidence=f"Process: {proc.name} (PID: {proc.pid})",
                 )
+                await _fire_webhook_if_enabled(
+                    contestant_id, ioa_type,
+                    evidence=f"Process: {proc.name} (PID: {proc.pid})",
+                    severity="HIGH",
+                )
 
     async def _handle_network_event(self, db, contestant_id, event):
         """Process a network event."""
@@ -224,6 +256,11 @@ class TelemetryServicer:
                 await IncidentService.process_telemetry_and_score(
                     db, contestant_id, ioa_type,
                     evidence=f"Connection: {event.dst_domain} ({event.dst_ip}:{event.dst_port})",
+                )
+                await _fire_webhook_if_enabled(
+                    contestant_id, ioa_type,
+                    evidence=f"Connection: {event.dst_domain} ({event.dst_ip}:{event.dst_port})",
+                    severity="HIGH",
                 )
 
     async def _handle_resource_snapshot(self, db, contestant_id, snapshot):
@@ -361,6 +398,12 @@ class EnrollmentServicer:
 async def serve_grpc():
     """Start the gRPC server with optional mTLS."""
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=settings.GRPC_MAX_WORKERS))
+
+    import sys
+    import os
+    voight_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../voight"))
+    if voight_dir not in sys.path:
+        sys.path.insert(0, voight_dir)
 
     # Register generated servicers here after protoc compilation:
     from voight import telemetry_pb2_grpc, enrollment_pb2_grpc

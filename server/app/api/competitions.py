@@ -44,6 +44,17 @@ async def list_competitions(
         results.append(resp)
     return results
 
+@router.get("/active", response_model=List[CompetitionResponse])
+async def list_active_competitions(
+    db: AsyncSession = Depends(get_db)
+):
+    """List active competitions. Used by the Agent Download page (public)."""
+    comps = await CompetitionService.list_all(db, status_filter="active")
+    results = []
+    for comp in comps:
+        resp = CompetitionResponse.model_validate(comp)
+        results.append(resp)
+    return results
 
 @router.post("/", response_model=CompetitionResponse, status_code=status.HTTP_201_CREATED)
 async def create_competition(

@@ -9,17 +9,19 @@ import {
   Box, Card, CardContent, Typography, Grid, Chip, Button,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, TextField,
-  IconButton, Tooltip, alpha, Skeleton, Alert, keyframes
+  IconButton, Tooltip, alpha, Skeleton, Alert, keyframes,
+  FormControlLabel, Switch, ButtonGroup, Divider
 } from '@mui/material';
 import {
   UserPlus, Copy, ArrowLeft, Wifi, WifiOff,
-  ExternalLink, RefreshCw, Activity, Edit2, Trash2, ShieldCheck, Search, Filter, ShieldAlert
+  ExternalLink, RefreshCw, Activity, Edit2, Trash2, ShieldCheck, Search, Filter, ShieldAlert, Monitor, MonitorOff, LayoutGrid
 } from 'lucide-react';
 import { competitionsAPI, contestantsAPI } from '../services/api';
 import { useWebSocket } from '../services/websocket';
 import IntegrityBadge from '../components/IntegrityBadge';
 import toast from 'react-hot-toast';
 import { COLORS } from '../theme/theme';
+import ScreenViewer from '../components/ScreenViewer';
 
 const sharpBlinkRed = keyframes`
   0%, 49% { border-color: ${COLORS.border}; background-color: ${COLORS.bgCard}; }
@@ -39,6 +41,9 @@ export default function CompetitionView() {
   // UX Enhancements: Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [filterState, setFilterState] = useState('ALL'); // ALL, CRITICAL, WARNING, OFFLINE
+  const [viewMode, setViewMode] = useState('NODE');
+  const [showOnlyActiveFeeds, setShowOnlyActiveFeeds] = useState(true);
+  const [gridColumns, setGridColumns] = useState(4);
 
   useEffect(() => {
     if (editTarget) {
@@ -213,57 +218,151 @@ export default function CompetitionView() {
         </Box>
         <Button
           id="add-contestant-btn"
-          variant="contained"
+          variant="outlined"
           startIcon={<UserPlus size={16} />}
           onClick={() => setAddOpen(true)}
-          sx={{ fontWeight: 800, fontFamily: 'monospace', borderRadius: 0, textTransform: 'uppercase' }}
+          sx={{ 
+            fontWeight: 800, fontFamily: 'monospace', borderRadius: 0, textTransform: 'uppercase',
+            color: COLORS.accent, borderColor: COLORS.accent,
+            '&:hover': { bgcolor: alpha(COLORS.accent, 0.1), borderColor: COLORS.accent }
+          }}
         >
           Add Contestant
         </Button>
       </Box>
 
-      {/* ─── UX/UI Filtering Bar ─── */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-        <TextField
-          placeholder="Search machine, IP, or team..."
-          size="small"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          slotProps={{ input: { startAdornment: <Search size={16} color={COLORS.textMuted} style={{ marginRight: 8 }} /> } }}
-          sx={{
-            minWidth: 280,
-            '& .MuiOutlinedInput-root': {
-              bgcolor: COLORS.bgDeep, borderRadius: 0, fontFamily: 'monospace', fontSize: '0.8rem',
-              '& fieldset': { borderColor: COLORS.border },
-              '&:hover fieldset': { borderColor: COLORS.textMuted },
-              '&.Mui-focused fieldset': { borderColor: COLORS.accent },
-            }
-          }}
-        />
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <Filter size={16} color={COLORS.textMuted} style={{ marginRight: 4 }} />
-          {[
-            { id: 'ALL', label: 'ALL', count: mergedContestants.length, color: COLORS.textMuted },
-            { id: 'CRITICAL', label: 'CRITICAL', count: stats.critical, color: COLORS.red },
-            { id: 'WARNING', label: 'WARNING', count: stats.warning, color: COLORS.yellow },
-            { id: 'LOCKED', label: 'LOCKED', count: stats.locked, color: '#a855f7' },
-            { id: 'OFFLINE', label: 'OFFLINE', count: stats.offline, color: COLORS.textMuted },
-          ].map(f => (
-            <Chip
-              key={f.id}
-              label={`${f.label} ${f.count > 0 ? `(${f.count})` : ''}`}
-              onClick={() => setFilterState(f.id)}
+      {/* ─── UX/UI Filtering & View Controls ─── */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', mb: 3, gap: 2 }}>
+        {/* Left: Search and Filters */}
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
+          <TextField
+            placeholder="Search machine, IP, or team..."
+            size="small"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            slotProps={{ input: { startAdornment: <Search size={16} color={COLORS.textMuted} style={{ marginRight: 8 }} /> } }}
+            sx={{
+              minWidth: 280,
+              '& .MuiOutlinedInput-root': {
+                bgcolor: COLORS.bgDeep, borderRadius: 0, fontFamily: 'monospace', fontSize: '0.8rem',
+                '& fieldset': { borderColor: COLORS.border },
+                '&:hover fieldset': { borderColor: COLORS.textMuted },
+                '&.Mui-focused fieldset': { borderColor: COLORS.accent },
+              }
+            }}
+          />
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Filter size={16} color={COLORS.textMuted} style={{ marginRight: 4 }} />
+            {[
+              { id: 'ALL', label: 'ALL', count: mergedContestants.length, color: COLORS.textMuted },
+              { id: 'CRITICAL', label: 'CRITICAL', count: stats.critical, color: COLORS.red },
+              { id: 'WARNING', label: 'WARNING', count: stats.warning, color: COLORS.yellow },
+              { id: 'LOCKED', label: 'LOCKED', count: stats.locked, color: '#a855f7' },
+              { id: 'OFFLINE', label: 'OFFLINE', count: stats.offline, color: COLORS.textMuted },
+            ].map(f => (
+              <Chip
+                key={f.id}
+                label={`${f.label} ${f.count > 0 ? `(${f.count})` : ''}`}
+                onClick={() => setFilterState(f.id)}
+                sx={{
+                  borderRadius: 0, fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer',
+                  bgcolor: filterState === f.id ? alpha(f.color, 0.2) : 'transparent',
+                  color: filterState === f.id ? f.color : COLORS.textMuted,
+                  border: `1px solid ${filterState === f.id ? f.color : COLORS.border}`,
+                  '&:hover': { bgcolor: alpha(f.color, 0.1), color: f.color, borderColor: f.color }
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+
+        <Divider orientation="vertical" flexItem sx={{ borderColor: COLORS.border, display: { xs: 'none', lg: 'block' } }} />
+
+        {/* Right: Screen Controls & Segmented Toggle */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+          {viewMode === 'SCREEN' && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Button
+                size="small"
+                onClick={() => setShowOnlyActiveFeeds(!showOnlyActiveFeeds)}
+                startIcon={showOnlyActiveFeeds ? <MonitorOff size={14} /> : <Monitor size={14} />}
+                sx={{
+                  borderRadius: 0, py: 0.5,
+                  border: `1px solid ${showOnlyActiveFeeds ? COLORS.accent : COLORS.borderLight}`,
+                  bgcolor: showOnlyActiveFeeds ? alpha(COLORS.accent, 0.15) : 'transparent',
+                  color: showOnlyActiveFeeds ? COLORS.accent : COLORS.textMuted,
+                  fontFamily: 'monospace', fontWeight: 800,
+                  '&:hover': { bgcolor: alpha(COLORS.accent, 0.1) }
+                }}
+              >
+                HIDE OFFLINE
+              </Button>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="caption" sx={{ color: COLORS.textMuted, fontFamily: 'monospace' }}>GRID</Typography>
+                <ButtonGroup size="small" variant="outlined" sx={{ '& .MuiButton-root': { borderColor: COLORS.borderLight, color: COLORS.textMuted, borderRadius: 0, minWidth: 32 } }}>
+                  {[1, 2, 3, 4, 6].map(num => (
+                    <Button 
+                      key={num} 
+                      onClick={() => setGridColumns(num)}
+                      sx={{ 
+                        bgcolor: gridColumns === num ? alpha(COLORS.accent, 0.2) : 'transparent', 
+                        color: gridColumns === num ? COLORS.accent : COLORS.textMuted,
+                        borderColor: gridColumns === num ? `${COLORS.accent} !important` : COLORS.borderLight,
+                        fontWeight: gridColumns === num ? 900 : 500,
+                      }}
+                    >
+                      {num}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+              </Box>
+            </Box>
+          )}
+
+          {/* Segmented Control */}
+          <Box sx={{ display: 'flex', bgcolor: COLORS.bgDeep, border: `1px solid ${COLORS.border}`, p: 0.5 }}>
+            <Button
+              onClick={() => setViewMode('NODE')}
+              startIcon={<LayoutGrid size={16} />}
               sx={{
-                borderRadius: 0, fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer',
-                bgcolor: filterState === f.id ? alpha(f.color, 0.2) : 'transparent',
-                color: filterState === f.id ? f.color : COLORS.textMuted,
-                border: `1px solid ${filterState === f.id ? f.color : COLORS.border}`,
-                '&:hover': { bgcolor: alpha(f.color, 0.1), color: f.color, borderColor: f.color }
+                borderRadius: 0, px: 2, py: 0.5,
+                bgcolor: viewMode === 'NODE' ? alpha(COLORS.accent, 0.15) : 'transparent',
+                color: viewMode === 'NODE' ? COLORS.accent : COLORS.textMuted,
+                fontWeight: 800, fontFamily: 'monospace', fontSize: '0.7rem',
+                border: 'none', '&:hover': { bgcolor: alpha(COLORS.accent, 0.1), border: 'none' }
               }}
-            />
-          ))}
+            >
+              NODES
+            </Button>
+            <Button
+              onClick={() => setViewMode('SCREEN')}
+              startIcon={<Monitor size={16} />}
+              sx={{
+                borderRadius: 0, px: 2, py: 0.5,
+                bgcolor: viewMode === 'SCREEN' ? alpha(COLORS.green, 0.15) : 'transparent',
+                color: viewMode === 'SCREEN' ? COLORS.green : COLORS.textMuted,
+                fontWeight: 800, fontFamily: 'monospace', fontSize: '0.7rem',
+                border: 'none', '&:hover': { bgcolor: alpha(COLORS.green, 0.1), border: 'none' }
+              }}
+            >
+              SCREENS
+            </Button>
+          </Box>
         </Box>
       </Box>
+
+      {/* Main Content Area */}
+
+      {/* ─── Content: Node View OR Screen View ─── */}
+      {viewMode === 'SCREEN' ? (
+        <ScreenViewer 
+          contestants={processedContestants} 
+          showOnlyActive={showOnlyActiveFeeds}
+          gridColumns={gridColumns}
+          refreshInterval={5} 
+        />
+      ) : (
+      <>
 
       {/* ─── Global Health Bar (HUD) ─── */}
       <Box sx={{ display: 'flex', height: 4, width: '100%', mb: 4, bgcolor: COLORS.bgDeep, borderRadius: 2, overflow: 'hidden' }}>
@@ -457,6 +556,7 @@ export default function CompetitionView() {
           })}
         </Box>
       )}
+      </>)}
 
       {/* Add Contestant Dialog */}
       <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>

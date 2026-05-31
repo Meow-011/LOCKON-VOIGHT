@@ -49,8 +49,10 @@ In the cyberpunk classic _Blade Runner_, the Voight-Kampff (V-K) machine is an a
 │  • Network Mon  │                        │  • Incident Mgmt │                    │  • Score Badges    │
 │  • GPU/VRAM Mon │                        │  • Celery Workers│                    │  • Resource Charts │
 │  • File Scanner │                        │  • Data Retention│                    │  • Incident Review │
-│  • Integrity    │                        │  • JWT + RBAC    │                    │  • Fleet Command   │
-│  • Watchdog     │                        │  • Rate Limiting │                    │  • Dark Tactical UI│
+│  • Screen Cptr  │                        │  • SIEM Exporter │                    │  • Screen Viewer   │
+│  • Watchdog     │                        │  • JWT + RBAC    │                    │  • Fleet Command   │
+│  • Auto-kill    │                        │  • Rate Limiting │                    │  • Dark Tactical UI│
+│  • Offline Cache│                        │                  │                    │                    │
 └─────────────────┘                        └──────────────────┘                    └────────────────────┘
          │                                          │
          │                              ┌───────────┴───────────┐
@@ -80,6 +82,11 @@ In the cyberpunk classic _Blade Runner_, the Voight-Kampff (V-K) machine is an a
 - **Live Operation Timers (T+)**: Automated mission duration tracking that synchronizes with competition states, providing a pulsing `T+ 00:00:00` display for active missions.
 - **Decoupled State Management**: Zero-flash UI updates using TanStack Query and WebSocket data streams for instantaneous integrity badge updates.
 - **Zero-Trust Sentinel Enrollment**: Automated token generation for agents, ensuring robust node identity mapping via hardware fingerprinting (MAC, CPU UUID).
+- **Multi-Competition Isolation**: Deploy concurrent, logically separated missions with unique Join Codes, allowing dynamic agent bundle generation and parallel CTF event management.
+- **Automated Remediation**: Auto-terminating unauthorized AI processes to reduce manual Proctor burden.
+- **Live Screen Broadcasting**: Remote screen capture integration to view a live feed of a contestant's screen.
+- **SIEM Integration**: Native webhook and export capabilities for enterprise telemetry logging, featuring dynamic Authorization Token injection (Bearer/Splunk HEC) and a live Dashboard testing interface.
+- **Offline Telemetry Caching**: boltdb-backed cache to retain and replay telemetry if the agent loses connection.
 
 </br>
 
@@ -178,19 +185,19 @@ While LOCKON VOIGHT employs advanced telemetry techniques, we maintain absolute 
 
 All API endpoints are protected with a layered security model:
 
-| Protection Layer              | Scope                                      | Mechanism                                                   |
-| ----------------------------- | ------------------------------------------ | ----------------------------------------------------------- |
-| **Mutual TLS (mTLS)**         | Agent ↔ Server gRPC channel                | TLS 1.3 with client certificate verification                |
-| **JWT Authentication**        | All Dashboard API endpoints                | Bearer token via `HTTPBearer`                               |
-| **DB-Level User Validation**  | All authenticated requests                 | Verifies user exists and `is_active` in DB per request      |
-| **Role-Based Access (RBAC)**  | Destructive operations (delete, user mgmt) | `require_admin` dependency                                  |
-| **Contestant Validation**     | All Telemetry ingestion endpoints          | `contestant_id` existence check                             |
-| **WebSocket Authentication**  | Real-time data feeds                       | JWT token via query parameter (enforced in production)      |
-| **Login Rate Limiting**       | `/api/auth/login`                          | 5 attempts per IP per 60 seconds                            |
-| **File Upload Validation**    | Banner uploads                             | Allowed types: `png, jpg, jpeg, gif, webp` - Max size: 10MB |
-| **JWT Startup Guard**         | Server boot                                | Refuses to start in production with default secret key      |
-| **CORS Restriction**          | Cross-origin requests                      | Explicit origin allowlist (no wildcards in production)      |
-| **Public Endpoint Isolation** | Agent Download page                        | Only `competitionKey` exposed via `/api/settings/public`    |
+| Protection Layer              | Scope                                      | Mechanism                                                                |
+| ----------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
+| **Mutual TLS (mTLS)**         | Agent ↔ Server gRPC channel                | TLS 1.3 with client certificate verification                             |
+| **JWT Authentication**        | All Dashboard API endpoints                | Bearer token via `HTTPBearer`                                            |
+| **DB-Level User Validation**  | All authenticated requests                 | Verifies user exists and `is_active` in DB per request                   |
+| **Role-Based Access (RBAC)**  | Destructive operations (delete, user mgmt) | `require_admin` dependency                                               |
+| **Contestant Validation**     | All Telemetry ingestion endpoints          | `contestant_id` existence check                                          |
+| **WebSocket Authentication**  | Real-time data feeds                       | JWT token via query parameter (enforced in production)                   |
+| **Login Rate Limiting**       | `/api/auth/login`                          | 5 attempts per IP per 60 seconds                                         |
+| **File Upload Validation**    | Banner uploads                             | Allowed types: `png, jpg, jpeg, gif, webp` - Max size: 10MB              |
+| **JWT Startup Guard**         | Server boot                                | Refuses to start in production with default secret key                   |
+| **CORS Restriction**          | Cross-origin requests                      | Explicit origin allowlist (no wildcards in production)                   |
+| **Public Endpoint Isolation** | Agent Download page                        | Only `join_code` of active events exposed via `/api/competitions/active` |
 
 ## System Requirements
 
@@ -229,6 +236,9 @@ All VOIGHT telemetry and offensive features are fully supported across Windows, 
 | **Tactical Screen Lock**       |   🟢 Fyne GUI   |   🟢 Fyne GUI    |   🟢 Fyne GUI    | Persistent fullscreen warning with 30s acknowledge countdown              |
 | **Tamper & Watchdog Protect**  |   🟢 Registry   |    🟢 systemd    |    🟢 launchd    | Auto-restarts agent via native service manager                            |
 | **Dynamic Config Sync**        |    🟢 Native    |    🟢 Native     |    🟢 Native     | Real-time interval updates from Dashboard                                 |
+| **Automated Process Kill**     |   ❌ Planned    |    ❌ Planned    |    ❌ Planned    | Automatically terminates processes matching the auto-kill criteria        |
+| **Live Screen Broadcasting**   |    🟢 Native    |    🟢 Native     |    🟢 Native     | Captures and uploads screenshot frames at dynamic intervals               |
+| **Offline Telemetry Cache**    |    🟢 boltdb    |    🟢 boltdb     |    🟢 boltdb     | Caches telemetry on disk during network outages and replays them later    |
 
 _(Legend: 🟢 Fully Supported & Tested \| 🟡 Partial/WIP \| ❌ Planned for Future Release)_
 
@@ -236,6 +246,7 @@ _(Legend: 🟢 Fully Supported & Tested \| 🟡 Partial/WIP \| ❌ Planned for F
 
 <div align="center">
   <img src="images/Agent-preview.png" alt="Agent Desktop GUI Preview" width="800" />
+  <img src="images/Live-screen-preview.png" alt="Live Screen Monitor Preview" width="800" />
 </div>
 
 <br/>
@@ -261,7 +272,7 @@ If deploying the Proctor Server to a cloud environment (e.g., AWS EC2, DigitalOc
 
 Before running the system locally, ensure you have the following software installed on your Proctor/Development machine:
 
-- **Docker Desktop** (Required for PostgreSQL & Redis)
+- **Docker Desktop** (Required for PostgreSQL, Redis, and cross-compiling the Agent via Fyne-cross)
 - **Python 3.12 (64-bit)** (Required for backend; newer versions like 3.14 may lack pre-compiled wheels)
 - **Node.js 18+ & npm** (For the React dashboard)
 - **Go 1.22+** (Required by `rebuild.ps1` to compile the agent binaries)
@@ -284,14 +295,16 @@ npm install
 cd ..
 ```
 
-> **Troubleshooting `pip install` errors on Windows:** 
+> **Troubleshooting `pip install` errors on Windows:**
 > If you encounter an error like `Failed building wheel for asyncpg` or `grpcio`, it means pip couldn't find a pre-compiled binary and failed trying to build from C++ source.
-> 
+>
 > **Causes:**
+>
 > 1. **You installed the 32-bit version of Python.** (Verify by running `python -c "import struct; print(struct.calcsize('P') * 8)"`).
 > 2. **Your Python version is too new** (e.g., Python 3.14), which doesn't have pre-compiled wheels yet.
-> 
+>
 > **How to Fix:**
+>
 > - **Uninstall your current Python version.**
 > - **Download and install [Python 3.12 (Windows installer 64-bit)](https://www.python.org/downloads/release/python-3120/).**
 > - Delete the old `venv` folder (`rm -r server\venv`) and recreate it.
@@ -429,17 +442,20 @@ All services run with health checks and automatic restarts. The API server runs 
 LOCKON VOIGHT includes an automated test suite covering the scoring engine and security layer:
 
 ```powershell
-# Run all tests (75 tests)
+# Run all tests
 cd server
-python -m pytest ../tests/test_scoring_engine.py ../tests/test_security_api.py -v
+python -m pytest ../tests/ -v
 ```
 
-| Test Suite         | Tests | Coverage                                                                                                                                               |
-| ------------------ | :---: | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Scoring Engine** |  61   | Score calculation, time decay, level boundaries, domain/process classification, dynamic policy, weight table integrity, memory forensics IoA, eBPF IoA |
-| **Security API**   |  27   | Password hashing, JWT creation/expiry/tampering, rate limiting, config security, IoA consistency                                                       |
+| Test Suite              | Coverage                                                                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Scoring Engine**      | Score calculation, time decay, level boundaries, domain/process classification, dynamic policy, weight table integrity, memory forensics IoA, eBPF IoA |
+| **Security & API**      | Password hashing, JWT creation/expiry/tampering, rate limiting, config security, IoA consistency, security audits                                      |
+| **gRPC & Telemetry**    | Secure mTLS communication, agent enrollment, telemetry payload parsing, and data ingestion                                                             |
+| **Load & Stress Tests** | End-to-end system load testing for concurrent agent connections                                                                                        |
+| **Agent Core (Go)**     | Native unit tests (`test.go`) for process monitoring and system metric collection                                                                      |
 
-All tests are pure Python (no database required) and run in <5 seconds.
+All Python tests are pure unit/integration tests and run efficiently without requiring a production database.
 
 ## Development & Contributing
 
@@ -451,19 +467,28 @@ We welcome contributions to expand VOIGHT's detection capabilities:
 
 ## Recently Completed
 
+- [x] **Enhanced Tactical HUD (Screen Viewer):** Completely redesigned the Live Screen Monitor modal with Glassmorphism overlays, integrated on-screen Zoom controls, and a decoupled Live Incident Feed to maximize operational screen real estate.
+- [x] **Multi-Competition Join Code Architecture:** Replaced global competition keys with per-event unique Join Codes. Allows managing multiple concurrent active events, with dynamic on-the-fly `JSZip` configuration injection for Agent downloads.
 - [x] **eBPF Integration (Linux):** Kernel-level monitoring via eBPF tracepoints (execve, connect, openat) for zero-overhead, tamper-proof telemetry. Requires Linux 5.15+ with BPF CO-RE.
 - [x] **Memory Forensics:** Deep RAM scanning of `/proc/<pid>/mem` to detect pre-loaded AI model tensors (GGUF, GGML, SafeTensors, PyTorch, ONNX) residing in process memory.
 - [x] **Agent GUI Interface:** Native graphical interface (Fyne) for the Sentinel Agent, providing contestants with a visible status panel showing connection health, enrollment status, and real-time heartbeat indicators.
 - [x] **Linux DNS Cache Profiling:** DNS cache extraction on Linux via `journalctl` / `systemd-resolved` with fallback domain probing.
 - [x] **Cross-Platform Screen Lock:** Tactical Screen Lock ported to Windows, macOS, and Linux using the native Fyne GUI engine.
 - [x] **macOS Complete Parity:** Full feature parity achieved — DNS cache (mDNSResponder), GPU (ioreg/IOAccelerator), Screen Lock (Fyne), Code Signing (`codesign`), and Watchdog (`launchd`).
+- [x] **Live Screen Broadcasting:** Remote screen capture integration to allow Proctors to view a live, low-framerate feed of a contestant's screen directly from the Fleet Command dashboard.
+- [x] **SIEM Integration:** Native webhooks and export capabilities to forward VOIGHT telemetry to Splunk, ElasticSearch, and Datadog for enterprise CTF environments. Includes secure, on-the-fly **Token Authentication** and a live testing suite built into the Proctor Dashboard.
+- [x] **Offline Telemetry Caching:** If network connectivity drops, the Agent caches telemetry locally in an encrypted boltdb and replays it upon reconnection to prevent tamper evasion during outages.
+- [x] **Comprehensive Test Suites:** Developed robust `pytest` coverage for the Scoring Engine and REST API, ensuring high reliability for IoA scoring algorithms.
 
 ## Future Roadmap
 
-- [ ] **Automated Remediation:** Configurable policies to automatically terminate (`SIGKILL`) unauthorized AI processes when detected, reducing the manual burden on Proctors.
-- [ ] **Live Screen Broadcasting:** WebRTC integration to allow Proctors to view a live, low-framerate feed of a contestant's screen directly from the Fleet Command dashboard when an incident triggers.
-- [ ] **SIEM Integration:** Native webhooks and export capabilities to forward VOIGHT telemetry to Splunk, ElasticSearch, and Datadog for enterprise CTF environments.
-- [ ] **Offline Telemetry Caching:** If network connectivity drops, the Agent caches telemetry locally in an encrypted boltdb and replays it upon reconnection to prevent tamper evasion during outages.
+- [ ] **Automated Remediation (Kill Process):** Configurable policies to automatically terminate (`SIGKILL` / `taskkill`) unauthorized AI processes when detected, reducing the manual burden on Proctors.
+- [ ] **Enforce gRPC mTLS (Production Security):** Implement and mandate Mutual TLS authentication between all Sentinel Agents and the Collector Server to prevent node spoofing.
+- [ ] **AI-Driven Behavioral Analysis:** Cloud-side Machine Learning integration to analyze keystroke dynamics and mouse telemetry, detecting superhuman typing speeds or automated macro/LLM copy-paste behavior.
+- [ ] **WebRTC Peer-to-Peer Live Broadcasting:** Upgrading the live screen capture from gRPC frames to a fully decentralized WebRTC implementation for 60FPS fluid video with zero central server bandwidth overhead.
+- [ ] **Windows Kernel-Level Driver (ETW / Ring-0):** Development of a signed Windows Kernel Driver (similar to Vanguard) to augment user-land monitoring and completely neutralize advanced rootkits or deeply injected memory cheats.
+- [ ] **Dynamic YARA Rule Deployment:** Enabling Proctors to dynamically upload and deploy custom YARA rules over-the-air to all Agents for real-time, on-the-fly memory scanning of zero-day malware or newly released AI tools.
+- [ ] **Automated Response Playbooks (SOAR):** A rule-engine interface allowing Proctors to define custom "If-This-Then-That" logic (e.g., `IF [DNS = openai.com] AND [Process = python.exe] THEN [Lock Screen + Deduct 50 Points]`).
 
 ## Frequently Asked Questions (FAQ)
 

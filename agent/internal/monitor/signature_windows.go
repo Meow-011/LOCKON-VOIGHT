@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lockon/voight-agent/internal/sysutil"
 )
 
 // ──────────────────────────────────────────────
@@ -108,6 +110,7 @@ func (ss *SignatureScanner) queryAuthenticode(ctx context.Context, exePath strin
 	)
 
 	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-Command", psCmd)
+	sysutil.HideConsoleWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return CategoryNormal

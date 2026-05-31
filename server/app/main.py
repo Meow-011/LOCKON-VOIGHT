@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.api import competitions, contestants, incidents, auth, health, telemetry, policy, settings as app_settings
+from app.services.screen_broadcast import router as screen_router
 from app.ws.endpoints import router as ws_router
 from app.core.config import settings
 from fastapi.staticfiles import StaticFiles
@@ -111,3 +112,6 @@ app.include_router(telemetry.router, prefix="/api/telemetry", tags=["Telemetry"]
 
 # WebSocket (Server → Dashboard)
 app.include_router(ws_router, tags=["WebSocket"])
+
+# Screen Broadcasting (Agent → Server → Dashboard)
+app.include_router(screen_router, prefix="/api/screen", tags=["Screen Broadcast"])

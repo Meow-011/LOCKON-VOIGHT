@@ -11,7 +11,10 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/lockon/voight-agent/internal/sysutil"
 )
 
 const (
@@ -89,6 +92,7 @@ func (w *Watchdog) isAgentAlive() bool {
 	// On Windows, FindProcess returns an error if the process doesn't exist
 	// Use tasklist to verify
 	cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", w.agentPID), "/FO", "CSV", "/NH")
+	sysutil.HideConsoleWindow(cmd)
 	output, err := cmd.Output()
 	if err != nil {
 		return false
@@ -226,6 +230,7 @@ func (w *Watchdog) restartViaWindows(execPath string) {
 // directRestart starts the agent binary as a detached child process.
 func (w *Watchdog) directRestart(agentPath string) {
 	cmd := exec.Command(agentPath)
+	sysutil.HideConsoleWindow(cmd)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	if err := cmd.Start(); err != nil {

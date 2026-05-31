@@ -16,6 +16,7 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 
 	"github.com/lockon/voight-agent/internal/config"
+	"github.com/lockon/voight-agent/internal/sysutil"
 )
 
 // ProcessCategory classifies a detected process.
@@ -216,6 +217,7 @@ func (pm *ProcessMonitor) checkWindowTitles(ctx context.Context) ([]ProcessInfo,
 // checkWindowTitlesWindows uses PowerShell to scan active window titles.
 func (pm *ProcessMonitor) checkWindowTitlesWindows(ctx context.Context) ([]ProcessInfo, error) {
 	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-Command", `Get-Process | Where-Object {$_.MainWindowTitle -ne ""} | Select-Object Name, MainWindowTitle, Id | ConvertTo-Json`)
+	sysutil.HideConsoleWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err

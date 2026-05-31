@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from voight import enrollment_pb2 as voight_dot_enrollment__pb2
+import enrollment_pb2 as enrollment__pb2
 
 GRPC_GENERATED_VERSION = '1.69.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in voight/enrollment_pb2_grpc.py depends on'
+        + f' but the generated code in enrollment_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -40,13 +40,13 @@ class EnrollmentServiceStub(object):
         """
         self.Enroll = channel.unary_unary(
                 '/voight.EnrollmentService/Enroll',
-                request_serializer=voight_dot_enrollment__pb2.EnrollmentRequest.SerializeToString,
-                response_deserializer=voight_dot_enrollment__pb2.EnrollmentResponse.FromString,
+                request_serializer=enrollment__pb2.EnrollmentRequest.SerializeToString,
+                response_deserializer=enrollment__pb2.EnrollmentResponse.FromString,
                 _registered_method=True)
         self.CheckStatus = channel.unary_unary(
                 '/voight.EnrollmentService/CheckStatus',
-                request_serializer=voight_dot_enrollment__pb2.StatusRequest.SerializeToString,
-                response_deserializer=voight_dot_enrollment__pb2.StatusResponse.FromString,
+                request_serializer=enrollment__pb2.StatusRequest.SerializeToString,
+                response_deserializer=enrollment__pb2.StatusResponse.FromString,
                 _registered_method=True)
 
 
@@ -76,13 +76,13 @@ def add_EnrollmentServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Enroll': grpc.unary_unary_rpc_method_handler(
                     servicer.Enroll,
-                    request_deserializer=voight_dot_enrollment__pb2.EnrollmentRequest.FromString,
-                    response_serializer=voight_dot_enrollment__pb2.EnrollmentResponse.SerializeToString,
+                    request_deserializer=enrollment__pb2.EnrollmentRequest.FromString,
+                    response_serializer=enrollment__pb2.EnrollmentResponse.SerializeToString,
             ),
             'CheckStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.CheckStatus,
-                    request_deserializer=voight_dot_enrollment__pb2.StatusRequest.FromString,
-                    response_serializer=voight_dot_enrollment__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=enrollment__pb2.StatusRequest.FromString,
+                    response_serializer=enrollment__pb2.StatusResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -114,8 +114,8 @@ class EnrollmentService(object):
             request,
             target,
             '/voight.EnrollmentService/Enroll',
-            voight_dot_enrollment__pb2.EnrollmentRequest.SerializeToString,
-            voight_dot_enrollment__pb2.EnrollmentResponse.FromString,
+            enrollment__pb2.EnrollmentRequest.SerializeToString,
+            enrollment__pb2.EnrollmentResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -141,8 +141,8 @@ class EnrollmentService(object):
             request,
             target,
             '/voight.EnrollmentService/CheckStatus',
-            voight_dot_enrollment__pb2.StatusRequest.SerializeToString,
-            voight_dot_enrollment__pb2.StatusResponse.FromString,
+            enrollment__pb2.StatusRequest.SerializeToString,
+            enrollment__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,

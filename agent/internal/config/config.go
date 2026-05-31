@@ -48,6 +48,9 @@ type Config struct {
 	AgentID       string `json:"agent_id"`
 	ContestantID  string `json:"contestant_id"`
 	CompetitionID string `json:"competition_id"`
+
+	// Remediation
+	AutoKillEnabled bool `json:"auto_kill_enabled"`
 }
 
 // SharedDetectionRules represents the shared detection_rules.json structure.
@@ -267,4 +270,45 @@ func (c *Config) FetchGlobalPolicy() error {
 	}
 
 	return nil
+}
+
+// SettingsResponse represents the REST API response for global settings.
+type SettingsResponse struct {
+	AutoKillProcesses      bool   `json:"autoKillProcesses"`
+	ScreenBroadcastEnabled bool   `json:"screenBroadcastEnabled"`
+	ScreenCaptureInterval  int    `json:"screenCaptureInterval"`
+	WebhookEnabled         bool   `json:"webhookEnabled"`
+	WebhookFormat          string `json:"webhookFormat"`
+}
+
+// FetchSettings pulls the latest global settings from the server REST API.
+// This is used for features that don't need gRPC proto changes (auto-kill, screen broadcast, etc.).
+func (c *Config) FetchSettings() (*SettingsResponse, error) {
+	url := fmt.Sprintf("http://%s:8000/api/settings/agent", c.ServerAddress)
+
+	client := http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("settings endpoint returned status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var settings SettingsResponse
+	if err := json.Unmarshal(body, &settings); err != nil {
+		return nil, err
+	}
+
+	// Apply auto-kill setting
+	c.AutoKillEnabled = settings.AutoKillProcesses
+
+	return &settings, nil
 }

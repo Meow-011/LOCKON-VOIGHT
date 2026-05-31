@@ -12,13 +12,14 @@ import {
   Button, Switch, FormControlLabel,
   Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText
 } from '@mui/material';
-import { ArrowLeft, Clock, Cpu, HardDrive, Monitor, Wifi, ShieldAlert, Activity, Terminal, Globe, Shield, ShieldCheck, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Clock, Cpu, HardDrive, Monitor, Wifi, ShieldAlert, Activity, Terminal, Globe, Shield, ShieldCheck, RefreshCw, X, Maximize } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, Legend,
 } from 'recharts';
 import { contestantsAPI } from '../services/api';
 import IntegrityBadge from '../components/IntegrityBadge';
+import ScreenViewer from '../components/ScreenViewer';
 import toast from 'react-hot-toast';
 import { COLORS } from '../theme/theme';
 
@@ -35,6 +36,7 @@ export default function ContestantDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showSystemEvents, setShowSystemEvents] = useState(false);
+  const [isScreenMonitorOpen, setIsScreenMonitorOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', onConfirm: null });
 
   const { data: contestant, isLoading } = useQuery({
@@ -83,9 +85,30 @@ export default function ContestantDetail() {
         try {
           await contestantsAPI.sendWarning(id);
           toast.success("Warning payload queued successfully. It will execute on the next heartbeat.");
+          setConfirmDialog({ open: false });
         } catch (err) {
           console.error(err);
           toast.error("Failed to queue warning payload.");
+          setConfirmDialog({ open: false });
+        }
+      }
+    });
+  };
+
+  const handleDisconnect = async () => {
+    setConfirmDialog({
+      open: true,
+      title: "Disconnect Agent",
+      message: "WARNING: This will forcefully terminate the VOIGHT agent on the contestant's machine. They will need to manually restart the agent to continue. Are you sure?",
+      onConfirm: async () => {
+        try {
+          await contestantsAPI.disconnect(id);
+          toast.success("Disconnect payload queued successfully. It will execute on the next heartbeat.");
+          setConfirmDialog({ open: false });
+        } catch (err) {
+          console.error(err);
+          toast.error("Failed to queue disconnect payload.");
+          setConfirmDialog({ open: false });
         }
       }
     });
@@ -167,6 +190,26 @@ export default function ContestantDetail() {
       </Box>
 
       <Grid container spacing={2}>
+        {/* Live Screen Monitor (Hidden by default, open via button) */}
+        <Grid size={{ xs: 12 }}>
+          {contestant && (
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={() => setIsScreenMonitorOpen(true)}
+              sx={{
+                py: 2.5, mb: 1, borderStyle: 'dashed', borderColor: COLORS.border,
+                color: COLORS.textSecondary, fontFamily: 'monospace', fontWeight: 800,
+                letterSpacing: '0.1em',
+                '&:hover': { borderColor: COLORS.accent, color: COLORS.accent, bgcolor: alpha(COLORS.accent, 0.05) }
+              }}
+            >
+              <Maximize size={18} style={{ marginRight: 12 }} />
+              VIEW LIVE SCREEN MONITOR
+            </Button>
+          )}
+        </Grid>
+
         {/* Resource Usage Chart */}
         <Grid size={{ xs: 12, lg: 8 }}>
           <Card>
@@ -218,7 +261,7 @@ export default function ContestantDetail() {
           </Card>
         </Grid>
 
-        {/* Info Cards */}
+        {/* Info Cards (Bento Box Style) */}
         <Grid size={{ xs: 12, lg: 4 }}>
           <Grid container spacing={2} sx={{ height: '100%' }} alignItems="stretch">
             {[
@@ -228,40 +271,39 @@ export default function ContestantDetail() {
               { label: 'Open Incidents', value: incidents?.filter((i) => i.status === 'OPEN').length ?? 0, icon: HardDrive },
               { label: 'Operating System', value: osValue, icon: Terminal },
               { label: 'IP Address', value: ipValue, icon: Globe },
-            ].map((info) => (
-              <Grid size={{ xs: 6 }} key={info.label} sx={{ display: 'flex' }}>
-                <Card sx={{
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  ...(info.label === 'Open Incidents' && info.value > 0 && {
-                    borderColor: alpha(COLORS.red, 0.5),
-                    bgcolor: alpha(COLORS.red, 0.05),
-                    boxShadow: `0 0 15px ${alpha(COLORS.red, 0.2)}`,
-                    animation: 'pulseRed 1.5s ease-in-out infinite'
-                  })
-                }}>
-                  {/* Watermark Icon */}
-                  <info.icon 
-                    size={64} 
-                    color={info.label === 'Open Incidents' && info.value > 0 ? COLORS.red : COLORS.textMuted} 
-                    style={{ position: 'absolute', right: -15, bottom: -15, opacity: 0.05 }} 
-                  />
-                  <CardContent sx={{ textAlign: 'center', py: '12px !important', zIndex: 1, position: 'relative' }}>
-                    <info.icon size={18} color={info.label === 'Open Incidents' && info.value > 0 ? COLORS.red : COLORS.textMuted} />
-                    <Typography variant="overline" sx={{ display: 'block', mt: 0.5 }}>
-                      {info.label}
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 700, color: COLORS.textPrimary }}>
-                      {info.value}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
+            ].map((info, index) => {
+              const isAlert = info.label === 'Open Incidents' && info.value > 0;
+              const TINTS = [COLORS.accent, '#3b82f6', COLORS.green, COLORS.yellow, '#a855f7', COLORS.red];
+              const tintColor = TINTS[index % TINTS.length];
+              
+              return (
+                <Grid size={{ xs: 6 }} key={info.label} sx={{ display: 'flex' }}>
+                  <Card sx={{
+                    flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                    bgcolor: isAlert ? alpha(COLORS.red, 0.1) : alpha(tintColor, 0.03),
+                    border: `1px solid ${isAlert ? COLORS.red : alpha(tintColor, 0.15)}`,
+                    borderRadius: 0,
+                    position: 'relative', overflow: 'hidden'
+                  }}>
+                    <CardContent sx={{ p: '16px !important', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+                      <info.icon size={16} color={COLORS.textMuted} style={{ marginBottom: 8 }} />
+                      <Typography variant="caption" sx={{ color: COLORS.textMuted, display: 'block', mb: 0.5, fontFamily: 'monospace', fontWeight: 800 }}>
+                        {info.label.toUpperCase()}
+                      </Typography>
+                      <Typography variant="h6" sx={{ color: isAlert ? COLORS.red : COLORS.textPrimary, fontWeight: 900, fontFamily: 'monospace', fontSize: info.value.toString().length > 15 ? '0.8rem' : '1.1rem' }}>
+                        {info.value}
+                      </Typography>
+                    </CardContent>
+                    
+                    {/* Background Watermark Icon */}
+                    <info.icon size={80} style={{
+                      position: 'absolute', right: -20, bottom: -20,
+                      opacity: 0.05, color: isAlert ? COLORS.red : tintColor
+                    }} />
+                  </Card>
+                </Grid>
+              );
+            })}
           </Grid>
         </Grid>
 
@@ -400,24 +442,52 @@ export default function ContestantDetail() {
           </Card>
         </Grid>
       </Grid>
-      <Dialog 
-        open={confirmDialog.open} 
+      <Dialog
+        open={confirmDialog.open}
         onClose={() => setConfirmDialog({ ...confirmDialog, open: false })}
-        PaperProps={{ sx: { bgcolor: COLORS.bgCard, border: `1px solid ${COLORS.borderLight}`, borderRadius: 0 } }}
+        PaperProps={{ sx: { bgcolor: COLORS.bgDeep, border: `1px solid ${COLORS.border}`, borderRadius: 0 } }}
       >
-        <DialogTitle sx={{ color: COLORS.textPrimary, fontFamily: 'monospace', fontWeight: 800 }}>{confirmDialog.title}</DialogTitle>
+        <DialogTitle sx={{ fontFamily: 'monospace', fontWeight: 900, color: COLORS.textPrimary }}>{confirmDialog.title}</DialogTitle>
         <DialogContent>
-          <DialogContentText sx={{ color: COLORS.textMuted, fontFamily: 'monospace', fontSize: '0.9rem' }}>
+          <DialogContentText sx={{ color: COLORS.textSecondary, fontFamily: 'monospace' }}>
             {confirmDialog.message}
           </DialogContentText>
         </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
+        <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setConfirmDialog({ ...confirmDialog, open: false })} sx={{ color: COLORS.textMuted, fontFamily: 'monospace', fontWeight: 800 }}>Cancel</Button>
-          <Button onClick={() => {
-            confirmDialog.onConfirm();
-            setConfirmDialog({ ...confirmDialog, open: false });
-          }} sx={{ color: COLORS.accent, fontFamily: 'monospace', fontWeight: 800 }}>Confirm</Button>
+          <Button onClick={confirmDialog.onConfirm} variant="contained" color="error" sx={{ fontFamily: 'monospace', fontWeight: 800, borderRadius: 0 }}>Confirm</Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Screen Monitor Fullscreen Dialog */}
+      <Dialog 
+        fullScreen 
+        open={isScreenMonitorOpen} 
+        onClose={() => setIsScreenMonitorOpen(false)}
+        PaperProps={{ sx: { bgcolor: COLORS.bgDeep, backgroundImage: 'none' } }}
+      >
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${COLORS.border}`, bgcolor: COLORS.bgCard }}>
+          <Typography variant="h6" sx={{ color: COLORS.textPrimary, fontFamily: 'monospace', fontWeight: 900, textTransform: 'uppercase' }}>
+            <Monitor size={18} style={{ marginRight: 8, verticalAlign: 'middle', color: COLORS.accent }} />
+            {contestant?.handle} - LIVE SCREEN MONITOR
+          </Typography>
+          <IconButton onClick={() => setIsScreenMonitorOpen(false)} sx={{ color: COLORS.textMuted }}>
+            <X size={24} />
+          </IconButton>
+        </Box>
+        <Box sx={{ flex: 1, overflow: 'hidden', p: 2, display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ width: '100%', height: '100%', mx: 'auto', display: 'flex' }}>
+            <ScreenViewer 
+              contestants={[contestant]} 
+              refreshInterval={5} 
+              singleMode={true} 
+              resourceData={resourceData}
+              incidents={incidents}
+              onSendWarning={handleSendWarning}
+              onDisconnect={handleDisconnect}
+            />
+          </Box>
+        </Box>
       </Dialog>
     </Box>
   );

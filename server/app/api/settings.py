@@ -6,6 +6,7 @@ import os
 import uuid
 
 from app.core.security import get_current_user
+from app.services.siem import siem_exporter
 
 router = APIRouter()
 
@@ -18,9 +19,19 @@ class SettingsModel(BaseModel):
     sensitivity: int
     autoBan: bool
     webhook: str
-    competitionKey: str
     scanInterval: int = 5
     dashboardBannerUrl: Optional[str] = None
+    autoKillProcesses: bool = False
+    webhookEnabled: bool = False
+    webhookFormat: str = "generic"
+    webhookToken: Optional[str] = None
+    screenBroadcastEnabled: bool = False
+    screenCaptureInterval: int = 5
+
+class WebhookTestRequest(BaseModel):
+    webhookUrl: str
+    webhookFormat: str
+    webhookToken: Optional[str] = None
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -33,18 +44,32 @@ def load_settings():
         "sensitivity": 70,
         "autoBan": False,
         "webhook": "https://discord.com/api/webhooks/...",
-        "competitionKey": "GLOBAL_COMP_KEY_12345",
         "scanInterval": 5,
-        "dashboardBannerUrl": None
+        "dashboardBannerUrl": None,
+        "autoKillProcesses": False,
+        "webhookEnabled": False,
+        "webhookFormat": "generic",
+        "webhookToken": None,
+        "screenBroadcastEnabled": False,
+        "screenCaptureInterval": 5
     }
 
 @router.get("/public")
 async def get_public_settings():
-    """Public endpoint — returns ONLY non-sensitive settings (e.g., competition key for agent config).
-    This is used by the Agent Download page which does NOT require authentication."""
+    """Public endpoint — currently returns nothing since competition key is removed."""
+    return {}
+
+@router.get("/agent")
+async def get_agent_settings():
+    """Agent-facing endpoint — returns operational settings for connected agents.
+    This endpoint does NOT require authentication so agents can poll it directly."""
     settings = load_settings()
     return {
-        "competitionKey": settings.get("competitionKey", ""),
+        "autoKillProcesses": settings.get("autoKillProcesses", False),
+        "screenBroadcastEnabled": settings.get("screenBroadcastEnabled", False),
+        "screenCaptureInterval": settings.get("screenCaptureInterval", 5),
+        "webhookEnabled": settings.get("webhookEnabled", False),
+        "webhookFormat": settings.get("webhookFormat", "generic"),
     }
 
 @router.get("/")
@@ -56,6 +81,14 @@ async def save_settings(settings: SettingsModel, current_user: dict = Depends(ge
     with open(SETTINGS_FILE, "w") as f:
         json.dump(settings.model_dump(), f)
     return {"status": "success"}
+
+@router.post("/test-webhook")
+async def test_webhook(req: WebhookTestRequest, current_user: dict = Depends(get_current_user)):
+    """Test the SIEM webhook endpoint."""
+    result = await siem_exporter.send_test(req.webhookUrl, req.webhookFormat, req.webhookToken)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to send webhook test."))
+    return result
 
 @router.post("/upload-banner")
 async def upload_dashboard_banner(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):

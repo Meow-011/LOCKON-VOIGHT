@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from voight import telemetry_pb2 as voight_dot_telemetry__pb2
+import telemetry_pb2 as telemetry__pb2
 
 GRPC_GENERATED_VERSION = '1.69.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in voight/telemetry_pb2_grpc.py depends on'
+        + f' but the generated code in telemetry_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -40,13 +40,23 @@ class TelemetryServiceStub(object):
         """
         self.StreamTelemetry = channel.stream_unary(
                 '/voight.TelemetryService/StreamTelemetry',
-                request_serializer=voight_dot_telemetry__pb2.TelemetryReport.SerializeToString,
-                response_deserializer=voight_dot_telemetry__pb2.TelemetryAck.FromString,
+                request_serializer=telemetry__pb2.TelemetryReport.SerializeToString,
+                response_deserializer=telemetry__pb2.TelemetryAck.FromString,
                 _registered_method=True)
         self.Heartbeat = channel.unary_unary(
                 '/voight.TelemetryService/Heartbeat',
-                request_serializer=voight_dot_telemetry__pb2.HeartbeatRequest.SerializeToString,
-                response_deserializer=voight_dot_telemetry__pb2.HeartbeatResponse.FromString,
+                request_serializer=telemetry__pb2.HeartbeatRequest.SerializeToString,
+                response_deserializer=telemetry__pb2.HeartbeatResponse.FromString,
+                _registered_method=True)
+        self.RequestHelp = channel.unary_unary(
+                '/voight.TelemetryService/RequestHelp',
+                request_serializer=telemetry__pb2.HelpRequest.SerializeToString,
+                response_deserializer=telemetry__pb2.HelpResponse.FromString,
+                _registered_method=True)
+        self.Disconnect = channel.unary_unary(
+                '/voight.TelemetryService/Disconnect',
+                request_serializer=telemetry__pb2.DisconnectRequest.SerializeToString,
+                response_deserializer=telemetry__pb2.DisconnectResponse.FromString,
                 _registered_method=True)
 
 
@@ -71,18 +81,42 @@ class TelemetryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RequestHelp(self, request, context):
+        """Contestant explicitly requests help from the Proctor
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Disconnect(self, request, context):
+        """Contestant intentionally disconnects the agent (Graceful Exit)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_TelemetryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'StreamTelemetry': grpc.stream_unary_rpc_method_handler(
                     servicer.StreamTelemetry,
-                    request_deserializer=voight_dot_telemetry__pb2.TelemetryReport.FromString,
-                    response_serializer=voight_dot_telemetry__pb2.TelemetryAck.SerializeToString,
+                    request_deserializer=telemetry__pb2.TelemetryReport.FromString,
+                    response_serializer=telemetry__pb2.TelemetryAck.SerializeToString,
             ),
             'Heartbeat': grpc.unary_unary_rpc_method_handler(
                     servicer.Heartbeat,
-                    request_deserializer=voight_dot_telemetry__pb2.HeartbeatRequest.FromString,
-                    response_serializer=voight_dot_telemetry__pb2.HeartbeatResponse.SerializeToString,
+                    request_deserializer=telemetry__pb2.HeartbeatRequest.FromString,
+                    response_serializer=telemetry__pb2.HeartbeatResponse.SerializeToString,
+            ),
+            'RequestHelp': grpc.unary_unary_rpc_method_handler(
+                    servicer.RequestHelp,
+                    request_deserializer=telemetry__pb2.HelpRequest.FromString,
+                    response_serializer=telemetry__pb2.HelpResponse.SerializeToString,
+            ),
+            'Disconnect': grpc.unary_unary_rpc_method_handler(
+                    servicer.Disconnect,
+                    request_deserializer=telemetry__pb2.DisconnectRequest.FromString,
+                    response_serializer=telemetry__pb2.DisconnectResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -114,8 +148,8 @@ class TelemetryService(object):
             request_iterator,
             target,
             '/voight.TelemetryService/StreamTelemetry',
-            voight_dot_telemetry__pb2.TelemetryReport.SerializeToString,
-            voight_dot_telemetry__pb2.TelemetryAck.FromString,
+            telemetry__pb2.TelemetryReport.SerializeToString,
+            telemetry__pb2.TelemetryAck.FromString,
             options,
             channel_credentials,
             insecure,
@@ -141,8 +175,62 @@ class TelemetryService(object):
             request,
             target,
             '/voight.TelemetryService/Heartbeat',
-            voight_dot_telemetry__pb2.HeartbeatRequest.SerializeToString,
-            voight_dot_telemetry__pb2.HeartbeatResponse.FromString,
+            telemetry__pb2.HeartbeatRequest.SerializeToString,
+            telemetry__pb2.HeartbeatResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RequestHelp(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/voight.TelemetryService/RequestHelp',
+            telemetry__pb2.HelpRequest.SerializeToString,
+            telemetry__pb2.HelpResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Disconnect(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/voight.TelemetryService/Disconnect',
+            telemetry__pb2.DisconnectRequest.SerializeToString,
+            telemetry__pb2.DisconnectResponse.FromString,
             options,
             channel_credentials,
             insecure,

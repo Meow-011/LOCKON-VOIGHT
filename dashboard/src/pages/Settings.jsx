@@ -6,9 +6,9 @@ import { useState, useEffect } from 'react';
 import {
   Box, Typography, Card, CardContent, Divider, Switch,
   Slider, TextField, Button, alpha, Snackbar, Alert,
-  Dialog, DialogTitle, DialogContent, DialogActions
+  Dialog, DialogTitle, DialogContent, DialogActions, IconButton, InputAdornment
 } from '@mui/material';
-import { Settings as SettingsIcon, ShieldAlert, Webhook, Zap, Key, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Settings as SettingsIcon, ShieldAlert, Webhook, Zap, Key, RefreshCw, AlertTriangle, Skull, Monitor, Send, Eye, EyeOff } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsAPI } from '../services/api';
 import { COLORS } from '../theme/theme';
@@ -17,8 +17,13 @@ const DEFAULT_STATE = {
   sensitivity: 70,
   autoBan: false,
   webhook: 'https://discord.com/api/webhooks/...',
-  competitionKey: 'GLOBAL_COMP_KEY_12345',
-  scanInterval: 5
+  scanInterval: 5,
+  autoKillProcesses: false,
+  webhookEnabled: false,
+  webhookFormat: 'generic',
+  webhookToken: '',
+  screenBroadcastEnabled: false,
+  screenCaptureInterval: 5
 };
 
 const getInitialState = () => {
@@ -44,20 +49,32 @@ export default function SettingsPage() {
   const [sensitivity, setSensitivity] = useState(DEFAULT_STATE.sensitivity);
   const [autoBan, setAutoBan] = useState(DEFAULT_STATE.autoBan);
   const [webhook, setWebhook] = useState(DEFAULT_STATE.webhook);
-  const [competitionKey, setCompetitionKey] = useState(DEFAULT_STATE.competitionKey);
   const [scanInterval, setScanInterval] = useState(DEFAULT_STATE.scanInterval);
   const [killSwitchConfirm, setKillSwitchConfirm] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [showSnackbar, setShowSnackbar] = useState(false);
   const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
+  const [autoKillProcesses, setAutoKillProcesses] = useState(DEFAULT_STATE.autoKillProcesses);
+  const [webhookEnabled, setWebhookEnabled] = useState(DEFAULT_STATE.webhookEnabled);
+  const [webhookFormat, setWebhookFormat] = useState(DEFAULT_STATE.webhookFormat);
+  const [webhookToken, setWebhookToken] = useState(DEFAULT_STATE.webhookToken);
+  const [showWebhookToken, setShowWebhookToken] = useState(false);
+  const [screenBroadcastEnabled, setScreenBroadcastEnabled] = useState(DEFAULT_STATE.screenBroadcastEnabled);
+  const [screenCaptureInterval, setScreenCaptureInterval] = useState(DEFAULT_STATE.screenCaptureInterval);
+  const [lastWebhookStatus, setLastWebhookStatus] = useState(null);
 
   useEffect(() => {
     if (settingsData) {
       setSensitivity(settingsData.sensitivity);
       setAutoBan(settingsData.autoBan);
       setWebhook(settingsData.webhook);
-      setCompetitionKey(settingsData.competitionKey);
       if (settingsData.scanInterval) setScanInterval(settingsData.scanInterval);
+      if (settingsData.autoKillProcesses !== undefined) setAutoKillProcesses(settingsData.autoKillProcesses);
+      if (settingsData.webhookEnabled !== undefined) setWebhookEnabled(settingsData.webhookEnabled);
+      if (settingsData.webhookFormat) setWebhookFormat(settingsData.webhookFormat);
+      if (settingsData.webhookToken !== undefined) setWebhookToken(settingsData.webhookToken || '');
+      if (settingsData.screenBroadcastEnabled !== undefined) setScreenBroadcastEnabled(settingsData.screenBroadcastEnabled);
+      if (settingsData.screenCaptureInterval) setScreenCaptureInterval(settingsData.screenCaptureInterval);
     }
   }, [settingsData]);
 
@@ -69,18 +86,36 @@ export default function SettingsPage() {
     },
   });
 
+  const testWebhookMutation = useMutation({
+    mutationFn: () => settingsAPI.testWebhook(webhook, webhookFormat, webhookToken),
+    onSuccess: (data) => {
+      setLastWebhookStatus({ ok: true, time: new Date().toLocaleTimeString() });
+      alert(`✅ Webhook test successful!\n${data.data?.message || ''}`);
+    },
+    onError: (err) => {
+      setLastWebhookStatus({ ok: false, time: new Date().toLocaleTimeString() });
+      const msg = err.response?.data?.detail || err.message;
+      alert(`❌ Webhook test failed:\n${msg}`);
+    }
+  });
+
   if (isLoading) return null;
 
   const hasChanges = settingsData && (
     sensitivity !== settingsData.sensitivity || 
     autoBan !== settingsData.autoBan || 
     webhook !== settingsData.webhook ||
-    competitionKey !== settingsData.competitionKey ||
-    scanInterval !== settingsData.scanInterval
+    scanInterval !== settingsData.scanInterval ||
+    autoKillProcesses !== (settingsData.autoKillProcesses || false) ||
+    webhookEnabled !== (settingsData.webhookEnabled || false) ||
+    webhookFormat !== (settingsData.webhookFormat || 'generic') ||
+    webhookToken !== (settingsData.webhookToken || '') ||
+    screenBroadcastEnabled !== (settingsData.screenBroadcastEnabled || false) ||
+    screenCaptureInterval !== (settingsData.screenCaptureInterval || 5)
   );
 
   const handleDeploy = () => {
-    mutation.mutate({ sensitivity, autoBan, webhook, competitionKey, scanInterval });
+    mutation.mutate({ sensitivity, autoBan, webhook, scanInterval, autoKillProcesses, webhookEnabled, webhookFormat, webhookToken, screenBroadcastEnabled, screenCaptureInterval });
   };
 
   return (
@@ -98,55 +133,6 @@ export default function SettingsPage() {
         </Box>
       </Box>
 
-      {/* AGENT ENROLLMENT */}
-      <Card sx={{ bgcolor: COLORS.bgDeep, border: `1px solid ${COLORS.border}`, borderRadius: 0 }}>
-        <Box sx={{ p: 2, borderBottom: `1px solid ${COLORS.border}`, bgcolor: COLORS.bgSurface, display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Key size={20} color={COLORS.accent} />
-          <Typography variant="subtitle1" sx={{ fontWeight: 800, letterSpacing: '0.05em' }}>AGENT ENROLLMENT</Typography>
-        </Box>
-        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 4, p: 3 }}>
-          <Box>
-            <Typography variant="body2" sx={{ fontWeight: 700, color: COLORS.textPrimary, mb: 1 }}>GLOBAL COMPETITION KEY</Typography>
-            <Typography variant="caption" sx={{ color: COLORS.textMuted, display: 'block', mb: 2 }}>
-              The universal secret key embedded in all downloadable agent bundles. Agents without this key will be rejected by the server. 
-              Rotating this key will invalidate all existing agent bundles and require contestants to download a new one.
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <TextField
-                fullWidth
-                value={competitionKey}
-                type={showKey ? 'text' : 'password'}
-                onChange={(e) => setCompetitionKey(e.target.value)}
-                variant="outlined"
-                size="small"
-                slotProps={{
-                  htmlInput: { readOnly: true },
-                  input: { sx: { fontFamily: 'monospace', color: showKey ? COLORS.green : COLORS.textPrimary } }
-                }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 0, bgcolor: '#000',
-                    '& fieldset': { borderColor: COLORS.borderLight },
-                  }
-                }}
-              />
-              <Button 
-                onClick={() => setShowKey(!showKey)}
-                sx={{ minWidth: 80, borderRadius: 0, border: `1px solid ${COLORS.borderLight}`, color: COLORS.textMuted, '&:hover': { color: COLORS.textPrimary, borderColor: COLORS.border } }}
-              >
-                {showKey ? 'HIDE' : 'SHOW'}
-              </Button>
-              <Button 
-                onClick={() => setRotateConfirmOpen(true)}
-                sx={{ minWidth: 140, borderRadius: 0, bgcolor: alpha(COLORS.red, 0.1), color: COLORS.red, border: `1px solid ${alpha(COLORS.red, 0.3)}`, '&:hover': { bgcolor: alpha(COLORS.red, 0.2) } }}
-                startIcon={<AlertTriangle size={16} />}
-              >
-                ROTATE KEY
-              </Button>
-            </Box>
-          </Box>
-        </CardContent>
-      </Card>
 
       {/* AGENT SCAN FREQUENCIES */}
       <Card sx={{ bgcolor: COLORS.bgDeep, border: `1px solid ${COLORS.border}`, borderRadius: 0 }}>
@@ -269,6 +255,117 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* AUTOMATED REMEDIATION */}
+      <Card sx={{ bgcolor: COLORS.bgDeep, border: `1px solid ${COLORS.border}`, borderRadius: 0 }}>
+        <Box sx={{ p: 2, borderBottom: `1px solid ${COLORS.border}`, bgcolor: COLORS.bgSurface, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Skull size={20} color={COLORS.red} />
+          <Typography variant="subtitle1" sx={{ fontWeight: 800, letterSpacing: '0.05em' }}>AUTOMATED REMEDIATION</Typography>
+        </Box>
+        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, p: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: COLORS.textPrimary }}>AUTO-KILL FLAGGED PROCESSES</Typography>
+              <Typography variant="caption" sx={{ color: COLORS.textMuted }}>
+                When enabled, the Agent will automatically terminate any process flagged by the detection engine (AI editors, local LLMs, AI agents, VMs, tunneling tools).
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', border: `1px solid ${COLORS.borderLight}` }}>
+              <Button 
+                onClick={() => setAutoKillProcesses(true)}
+                sx={{ 
+                  borderRadius: 0, minWidth: 60, py: 0.5,
+                  bgcolor: autoKillProcesses ? COLORS.red : 'transparent',
+                  color: autoKillProcesses ? '#fff' : COLORS.textMuted,
+                  fontWeight: 800,
+                  '&:hover': { bgcolor: autoKillProcesses ? COLORS.red : alpha(COLORS.red, 0.1) }
+                }}>ON</Button>
+              <Button 
+                onClick={() => setAutoKillProcesses(false)}
+                sx={{ 
+                  borderRadius: 0, minWidth: 60, py: 0.5,
+                  bgcolor: !autoKillProcesses ? COLORS.textSecondary : 'transparent',
+                  color: !autoKillProcesses ? '#000' : COLORS.textMuted,
+                  fontWeight: 800,
+                  '&:hover': { bgcolor: !autoKillProcesses ? COLORS.textSecondary : alpha(COLORS.textSecondary, 0.1) }
+                }}>OFF</Button>
+            </Box>
+          </Box>
+          {autoKillProcesses && (
+            <Box sx={{ bgcolor: alpha(COLORS.red, 0.08), p: 1.5, borderLeft: `2px solid ${COLORS.red}` }}>
+              <Typography variant="caption" sx={{ color: COLORS.red, fontFamily: 'monospace', display: 'block', fontWeight: 700 }}>
+                ⚠ WARNING: Auto-kill is ACTIVE. The Agent will forcefully terminate flagged processes on contestant machines without manual Proctor confirmation.
+              </Typography>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* SCREEN BROADCASTING */}
+      <Card sx={{ bgcolor: COLORS.bgDeep, border: `1px solid ${COLORS.border}`, borderRadius: 0 }}>
+        <Box sx={{ p: 2, borderBottom: `1px solid ${COLORS.border}`, bgcolor: COLORS.bgSurface, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Monitor size={20} color={COLORS.accent} />
+          <Typography variant="subtitle1" sx={{ fontWeight: 800, letterSpacing: '0.05em' }}>SCREEN BROADCASTING</Typography>
+        </Box>
+        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, p: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: COLORS.textPrimary }}>ENABLE SCREEN CAPTURE</Typography>
+              <Typography variant="caption" sx={{ color: COLORS.textMuted }}>
+                Agents will periodically capture and transmit screenshots of contestant screens to the Dashboard for Proctor review.
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', border: `1px solid ${COLORS.borderLight}` }}>
+              <Button 
+                onClick={() => setScreenBroadcastEnabled(true)}
+                sx={{ 
+                  borderRadius: 0, minWidth: 60, py: 0.5,
+                  bgcolor: screenBroadcastEnabled ? COLORS.green : 'transparent',
+                  color: screenBroadcastEnabled ? '#000' : COLORS.textMuted,
+                  fontWeight: 800,
+                  '&:hover': { bgcolor: screenBroadcastEnabled ? COLORS.green : alpha(COLORS.green, 0.1) }
+                }}>ON</Button>
+              <Button 
+                onClick={() => setScreenBroadcastEnabled(false)}
+                sx={{ 
+                  borderRadius: 0, minWidth: 60, py: 0.5,
+                  bgcolor: !screenBroadcastEnabled ? COLORS.textSecondary : 'transparent',
+                  color: !screenBroadcastEnabled ? '#000' : COLORS.textMuted,
+                  fontWeight: 800,
+                  '&:hover': { bgcolor: !screenBroadcastEnabled ? COLORS.textSecondary : alpha(COLORS.textSecondary, 0.1) }
+                }}>OFF</Button>
+            </Box>
+          </Box>
+          {screenBroadcastEnabled && (
+            <Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: COLORS.textPrimary }}>CAPTURE INTERVAL</Typography>
+                <Typography variant="caption" sx={{ color: COLORS.accent, fontFamily: 'monospace', fontWeight: 800, bgcolor: alpha(COLORS.accent, 0.1), px: 1, py: 0.5 }}>
+                  [ EVERY {screenCaptureInterval} SECONDS ]
+                </Typography>
+              </Box>
+              <Slider
+                value={screenCaptureInterval}
+                onChange={(e, v) => setScreenCaptureInterval(v)}
+                min={2} max={30}
+                marks={[
+                  { value: 2, label: '2s' },
+                  { value: 5, label: '5s' },
+                  { value: 15, label: '15s' },
+                  { value: 30, label: '30s' }
+                ]}
+                sx={{
+                  color: COLORS.accent,
+                  '& .MuiSlider-thumb': { borderRadius: 0, width: 12, height: 24 },
+                  '& .MuiSlider-rail': { bgcolor: COLORS.border, opacity: 1 },
+                  '& .MuiSlider-mark': { bgcolor: COLORS.textMuted, width: 2, height: 6 },
+                  '& .MuiSlider-markLabel': { color: COLORS.textMuted, fontFamily: 'monospace', fontSize: '0.65rem', mt: 0.5 }
+                }}
+              />
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
       {/* INTEGRATIONS */}
       <Card sx={{ bgcolor: COLORS.bgDeep, border: `1px solid ${COLORS.border}`, borderRadius: 0 }}>
         <Box sx={{ p: 2, borderBottom: `1px solid ${COLORS.border}`, bgcolor: COLORS.bgSurface, display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -276,32 +373,154 @@ export default function SettingsPage() {
           <Typography variant="subtitle1" sx={{ fontWeight: 800, letterSpacing: '0.05em' }}>INTEGRATIONS</Typography>
         </Box>
         <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, p: 3 }}>
-          <Box>
-            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: COLORS.textPrimary }}>SIEM / WEBHOOK ENDPOINT</Typography>
-            <TextField
-              fullWidth
-              value={webhook}
-              onChange={(e) => setWebhook(e.target.value)}
-              variant="outlined"
-              size="small"
-              slotProps={{
-                input: {
-                  startAdornment: <Typography sx={{ color: COLORS.yellow, mr: 1, fontFamily: 'monospace', fontWeight: 'bold' }}>{'>_'}</Typography>
-                }
-              }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 0,
-                  bgcolor: '#000',
-                  fontFamily: 'monospace',
-                  color: COLORS.textSecondary,
-                  '& fieldset': { borderColor: COLORS.borderLight },
-                  '&:hover fieldset': { borderColor: COLORS.textMuted },
-                  '&.Mui-focused fieldset': { borderColor: COLORS.yellow },
-                }
-              }}
-            />
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5, color: COLORS.textPrimary }}>WEBHOOK NOTIFICATIONS</Typography>
+              <Typography variant="caption" sx={{ color: COLORS.textMuted }}>
+                Send real-time incident alerts to external systems when IoA events are detected.
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', border: `1px solid ${COLORS.borderLight}` }}>
+              <Button 
+                onClick={() => setWebhookEnabled(true)}
+                sx={{ 
+                  borderRadius: 0, minWidth: 60, py: 0.5,
+                  bgcolor: webhookEnabled ? COLORS.yellow : 'transparent',
+                  color: webhookEnabled ? '#000' : COLORS.textMuted,
+                  fontWeight: 800,
+                  '&:hover': { bgcolor: webhookEnabled ? COLORS.yellow : alpha(COLORS.yellow, 0.1) }
+                }}>ON</Button>
+              <Button 
+                onClick={() => setWebhookEnabled(false)}
+                sx={{ 
+                  borderRadius: 0, minWidth: 60, py: 0.5,
+                  bgcolor: !webhookEnabled ? COLORS.textSecondary : 'transparent',
+                  color: !webhookEnabled ? '#000' : COLORS.textMuted,
+                  fontWeight: 800,
+                  '&:hover': { bgcolor: !webhookEnabled ? COLORS.textSecondary : alpha(COLORS.textSecondary, 0.1) }
+                }}>OFF</Button>
+            </Box>
           </Box>
+          {webhookEnabled && (
+            <>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: COLORS.textPrimary }}>EXPORT FORMAT</Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'GENERIC JSON', val: 'generic' },
+                    { label: 'SPLUNK HEC', val: 'splunk_hec' },
+                    { label: 'ELASTIC', val: 'elastic' }
+                  ].map(opt => (
+                    <Button 
+                      key={opt.val}
+                      onClick={() => setWebhookFormat(opt.val)}
+                      sx={{ 
+                        borderRadius: 0, px: 2, py: 0.5, border: `1px solid ${webhookFormat === opt.val ? COLORS.yellow : COLORS.borderLight}`,
+                        bgcolor: webhookFormat === opt.val ? alpha(COLORS.yellow, 0.1) : 'transparent',
+                        color: webhookFormat === opt.val ? COLORS.yellow : COLORS.textMuted,
+                        fontWeight: 800, fontFamily: 'monospace',
+                        '&:hover': { bgcolor: alpha(COLORS.yellow, 0.2), borderColor: COLORS.yellow }
+                      }}>
+                      {opt.label}
+                    </Button>
+                  ))}
+                </Box>
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: COLORS.textPrimary }}>SIEM / WEBHOOK ENDPOINT</Typography>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                  <TextField
+                    fullWidth
+                    value={webhook}
+                    onChange={(e) => setWebhook(e.target.value)}
+                    variant="outlined"
+                    size="small"
+                    placeholder="https://..."
+                    slotProps={{
+                      input: {
+                        startAdornment: <Typography sx={{ color: COLORS.yellow, mr: 1, fontFamily: 'monospace', fontWeight: 'bold' }}>{'>'}</Typography>
+                      }
+                    }}
+                    sx={{
+                      flexGrow: 1,
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: 0,
+                        bgcolor: '#000',
+                        fontFamily: 'monospace',
+                        color: COLORS.textSecondary,
+                        '& fieldset': { borderColor: COLORS.borderLight },
+                        '&:hover fieldset': { borderColor: COLORS.textMuted },
+                        '&.Mui-focused fieldset': { borderColor: COLORS.yellow },
+                      }
+                    }}
+                  />
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <Button
+                      variant="outlined"
+                      startIcon={testWebhookMutation.isPending ? null : <Send size={14} />}
+                      disabled={testWebhookMutation.isPending || !webhook}
+                      onClick={() => testWebhookMutation.mutate()}
+                      sx={{
+                        borderRadius: 0, borderColor: COLORS.yellow, color: COLORS.yellow,
+                        fontFamily: 'monospace', fontWeight: 800, letterSpacing: '0.05em', height: '40px',
+                        whiteSpace: 'nowrap', minWidth: '140px',
+                        '&:hover': { bgcolor: alpha(COLORS.yellow, 0.1), borderColor: COLORS.yellow }
+                      }}
+                    >
+                      {testWebhookMutation.isPending ? 'TESTING...' : 'TEST WEBHOOK'}
+                    </Button>
+                    {lastWebhookStatus && (
+                      <Typography variant="caption" sx={{ mt: 0.5, fontFamily: 'monospace', color: lastWebhookStatus.ok ? COLORS.green : COLORS.red }}>
+                        {lastWebhookStatus.ok ? '🟢 OK' : '🔴 FAILED'} ({lastWebhookStatus.time})
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, color: COLORS.textPrimary }}>AUTHORIZATION TOKEN (OPTIONAL)</Typography>
+                <TextField
+                  fullWidth
+                  type={showWebhookToken ? "text" : "password"}
+                  value={webhookToken}
+                  onChange={(e) => setWebhookToken(e.target.value)}
+                  variant="outlined"
+                  size="small"
+                  placeholder="Bearer token or API Key..."
+                  slotProps={{
+                    input: {
+                      startAdornment: <Key size={16} color={COLORS.textMuted} style={{ marginRight: 8 }} />,
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton onClick={() => setShowWebhookToken(!showWebhookToken)} edge="end" sx={{ color: COLORS.textMuted }}>
+                            {showWebhookToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </IconButton>
+                        </InputAdornment>
+                      )
+                    }
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 0,
+                      bgcolor: '#000',
+                      fontFamily: 'monospace',
+                      color: COLORS.textSecondary,
+                      '& fieldset': { borderColor: COLORS.borderLight },
+                      '&:hover fieldset': { borderColor: COLORS.textMuted },
+                      '&.Mui-focused fieldset': { borderColor: COLORS.yellow },
+                    }
+                  }}
+                />
+                <Typography variant="caption" sx={{ color: COLORS.textMuted, display: 'block', mt: 1, fontFamily: 'monospace' }}>
+                  {webhookFormat === 'splunk_hec' 
+                    ? "Splunk HEC: Passed as 'Authorization: Splunk <token>' header. Ensure your endpoint ends with /services/collector/raw."
+                    : webhookFormat === 'elastic'
+                    ? "Elastic: Passed as 'Authorization: Bearer <token>' header."
+                    : "Generic: Passed as 'Authorization: Bearer <token>' header. Use for Discord/Slack if using a custom proxy that requires auth."}
+                </Typography>
+              </Box>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -378,31 +597,6 @@ export default function SettingsPage() {
           DEPLOY CONFIGURATION
         </Button>
       </Box>
-
-      {/* Rotate Key Confirm Dialog */}
-      <Dialog open={rotateConfirmOpen} onClose={() => setRotateConfirmOpen(false)} maxWidth="xs" fullWidth
-        PaperProps={{ sx: { bgcolor: COLORS.bgDeep, border: `1px solid ${COLORS.red}`, borderRadius: 0 } }}>
-        <DialogTitle sx={{ fontFamily: 'monospace', fontWeight: 800, color: COLORS.red, display: 'flex', alignItems: 'center', gap: 2 }}>
-          <AlertTriangle size={20} /> ROTATE COMPETITION KEY
-        </DialogTitle>
-        <DialogContent sx={{ pt: '16px !important' }}>
-          <Typography sx={{ color: '#fff', fontFamily: 'monospace', fontSize: '0.85rem' }}>
-            Rotating the global key will <strong style={{ color: COLORS.red }}>disconnect all currently active agents</strong>. 
-            Contestants will be forced to download a new agent bundle. Are you sure you want to proceed?
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 3, pt: 0 }}>
-          <Button onClick={() => setRotateConfirmOpen(false)} sx={{ color: COLORS.textMuted, fontFamily: 'monospace' }}>CANCEL</Button>
-          <Button variant="contained" 
-            onClick={() => {
-              setCompetitionKey('COMP_KEY_' + Math.random().toString(36).substr(2, 9).toUpperCase());
-              setRotateConfirmOpen(false);
-            }}
-            sx={{ bgcolor: COLORS.red, color: '#fff', fontWeight: 900, borderRadius: 0, fontFamily: 'monospace', '&:hover': { bgcolor: '#fff', color: COLORS.red } }}>
-            ROTATE KEY
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Success Snackbar */}
       <Snackbar open={showSnackbar} autoHideDuration={3000} onClose={() => setShowSnackbar(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

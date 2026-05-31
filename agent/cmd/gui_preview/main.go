@@ -22,7 +22,7 @@ func main() {
 	// Simulate connection after 2 seconds
 	go func() {
 		time.Sleep(2 * time.Second)
-		appGUI.UpdateStatus(true, "Mock_Contestant")
+		appGUI.UpdateStatus(true)
 		appGUI.UpdateScore(0) // Mock 0 AI score (SECURE)
 		
 		time.Sleep(3 * time.Second)

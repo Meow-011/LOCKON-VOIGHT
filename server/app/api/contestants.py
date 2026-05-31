@@ -236,6 +236,30 @@ async def send_warning(
     return MessageResponse(message="Warning payload queued successfully")
 
 
+@router.post("/{contestant_id}/disconnect", response_model=MessageResponse)
+async def send_disconnect(
+    contestant_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Queue a disconnect payload for the contestant's agent."""
+    from app.services.telemetry import TelemetryService, IncidentService
+    contestant = await ContestantService.get_by_id(db, contestant_id)
+    if not contestant:
+        raise HTTPException(status_code=404, detail="Contestant not found")
+        
+    TelemetryService.queue_disconnect(str(contestant_id))
+    
+    # Create incident for tracking
+    await IncidentService.create_incident(
+        db, contestant_id, indicator_type="DISCONNECT_ISSUED", evidence="Force disconnect command deployed by proctor."
+    )
+    
+    await db.commit()
+    
+    return MessageResponse(message="Disconnect payload queued successfully")
+
+
 @router.get("/{contestant_id}/scores", response_model=List[IntegrityScoreResponse])
 async def get_contestant_scores(
     contestant_id: UUID,

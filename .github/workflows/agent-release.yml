@@ -1,0 +1,99 @@
+name: Agent Release Builder
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger automatically when you push a tag like v2.1.4
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  build:
+    name: Build Agent for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install Linux Dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
+
+      - name: Build Agent (Windows)
+        if: matrix.os == 'windows-latest'
+        working-directory: ./agent
+        run: |
+          go build -ldflags="-s -w" -o voight-sentinel.exe ./cmd/voight
+          
+          mkdir bundle
+          cp voight-sentinel.exe bundle/
+          echo "LOCKON VOIGHT Sentinel - Windows" > bundle/README.txt
+          echo "1. Extract all files to a folder." >> bundle/README.txt
+          echo "2. Open config.json and set your team_name." >> bundle/README.txt
+          echo "3. Run voight-sentinel.exe as Administrator." >> bundle/README.txt
+          
+          # Create a template config.json
+          echo '{ "server_address": "SERVER_IP_HERE", "grpc_port": 50052, "team_name": "YOUR_TEAM_NAME_HERE", "contestant_name": "YOUR_ALIAS_HERE", "competition_key": "GLOBAL_COMP_KEY_12345", "use_tls": false }' > bundle/config.json
+          
+          Compress-Archive -Path bundle/* -DestinationPath voight-sentinel-windows-bundle.zip
+
+      - name: Build Agent (Linux & macOS)
+        if: matrix.os != 'windows-latest'
+        working-directory: ./agent
+        run: |
+          binary_name="voight-sentinel"
+          if [ "${{ matrix.os }}" == "macos-latest" ]; then
+            binary_name="voight-sentinel-darwin"
+          fi
+
+          go build -ldflags="-s -w" -o $binary_name ./cmd/voight
+          
+          mkdir bundle
+          cp $binary_name bundle/
+          
+          echo "LOCKON VOIGHT Sentinel - Unix" > bundle/README.txt
+          echo "1. Extract all files to a folder." >> bundle/README.txt
+          echo "2. Open config.json and set your team_name." >> bundle/README.txt
+          echo "3. Run ./$binary_name with sudo/root privileges." >> bundle/README.txt
+          
+          echo '{ "server_address": "SERVER_IP_HERE", "grpc_port": 50052, "team_name": "YOUR_TEAM_NAME_HERE", "contestant_name": "YOUR_ALIAS_HERE", "competition_key": "GLOBAL_COMP_KEY_12345", "use_tls": false }' > bundle/config.json
+          
+          cd bundle
+          zip -r ../voight-sentinel-${{ matrix.os }}-bundle.zip ./*
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-bundle-${{ matrix.os }}
+          path: agent/*.zip
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/agent-bundle-windows-latest/voight-sentinel-windows-bundle.zip
+            artifacts/agent-bundle-ubuntu-latest/voight-sentinel-ubuntu-latest-bundle.zip
+            artifacts/agent-bundle-macos-latest/voight-sentinel-macos-latest-bundle.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

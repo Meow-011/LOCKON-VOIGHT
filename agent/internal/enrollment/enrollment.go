@@ -19,6 +19,7 @@ import (
 	psnet "github.com/shirou/gopsutil/v3/net"
 
 	"github.com/lockon/voight-agent/internal/config"
+	"github.com/lockon/voight-agent/internal/sysutil"
 )
 
 // MachineFingerprint contains hardware identification of the contestant's machine.
@@ -88,7 +89,7 @@ func (m *Manager) Enroll(ctx context.Context, binaryHash string) (*EnrollmentRes
 	if m.cfg.ContestantName != "" {
 		token = token + "::" + m.cfg.ContestantName
 	}
-	result, err := m.enrollFn(ctx, token, fp, "0.1.0", binaryHash)
+	result, err := m.enrollFn(ctx, token, fp, "2.1.4", binaryHash)
 	if err != nil {
 		return nil, fmt.Errorf("enrollment failed: %w", err)
 	}
@@ -188,6 +189,7 @@ func getGPUInfo() (string, int64) {
 	// This is a simplified version — nvidia-smi parsing is in resource monitor
 	// Here we just get the GPU name and total VRAM for fingerprinting
 	cmd := exec.Command("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits")
+	sysutil.HideConsoleWindow(cmd)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", 0

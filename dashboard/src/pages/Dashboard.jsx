@@ -232,7 +232,7 @@ export default function Dashboard() {
             <Box sx={{ position: 'relative', zIndex: 2 }}>
               <Typography variant="h5" sx={{ color: '#000', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>System Status</Typography>
             </Box>
-            <Box component="img" src="/system-status-cat.svg" alt="Status Mascot" sx={{ position: 'absolute', top: 40, right: 55, height: 170, width: 'auto', opacity: 0.9, zIndex: 1, pointerEvents: 'none' }} />
+            <Box component="img" src="/dashboard-bento.gif?v=2" alt="Status Mascot" sx={{ position: 'absolute', top: 70, right: 55, height: 195, width: 'auto', opacity: 0.9, zIndex: 1, pointerEvents: 'none' }} />
             <Box sx={{ position: 'relative', zIndex: 2 }}>
               <Typography sx={{ color: '#000', fontWeight: 800, fontSize: '6rem', lineHeight: 0.8, letterSpacing: '-0.05em', fontFamily: 'monospace' }}>
                 {recentIncidents?.length > 0 ? `${recentIncidents.length} ALERTS` : 'SECURE'}

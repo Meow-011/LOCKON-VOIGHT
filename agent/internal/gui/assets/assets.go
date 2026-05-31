@@ -12,3 +12,6 @@ var IconTabBytes []byte
 
 //go:embed PressStart2P-Regular.ttf
 var FontBytes []byte
+
+//go:embed cocktail.gif
+var CocktailBytes []byte

@@ -16,6 +16,7 @@ import (
 	psnet "github.com/shirou/gopsutil/v3/net"
 
 	"github.com/lockon/voight-agent/internal/config"
+	"github.com/lockon/voight-agent/internal/sysutil"
 )
 
 // NetworkVerdict classifies a network connection.
@@ -174,6 +175,7 @@ func (nm *NetworkMonitor) updateDNSCache() {
 // updateDNSCacheWindows uses PowerShell Get-DnsClientCache to extract cached DNS entries.
 func (nm *NetworkMonitor) updateDNSCacheWindows() {
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", `Get-DnsClientCache | Select-Object Entry, Data | ConvertTo-Json`)
+	sysutil.HideConsoleWindow(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return

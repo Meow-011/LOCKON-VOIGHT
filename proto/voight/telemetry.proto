@@ -112,6 +112,7 @@ message HeartbeatResponse {
   int32 heartbeat_interval_seconds = 2;  // Server can adjust interval
   AgentConfig config_update = 3;         // Optional config push
   bool deploy_warning_payload = 4;       // Command to lock screen
+  bool force_disconnect = 5;             // Command to gracefully terminate the agent
 }
 
 message AgentConfig {

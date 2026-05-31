@@ -22,6 +22,7 @@ class Competition(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     banner = Column(String(255), nullable=True)
+    join_code = Column(String(20), unique=True, index=True, nullable=True)
     status = Column(String(50), nullable=False, default="draft")  # draft, active, completed, archived
     start_time = Column(DateTime(timezone=True), nullable=True)
     end_time = Column(DateTime(timezone=True), nullable=True)
